@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regression test: fixtures/nodes.json -> Device.info == fixtures/devices.json
 
-    python3 test_devices.py
+    python3 tests/test_devices.py      (from the mqtt_bridge directory)
 
 fixtures/devices.json is a real mt2m/bridge/devices capture (two IKEA KAJPLATS bulbs on
 Thread). fixtures/nodes.json is the matter-server node data that feeds it -- reconstructed
@@ -13,10 +13,12 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # the matter2mqtt package
+
 from matter_server.client.models.node import MatterNode
 from matter_server.common.models import MatterNodeData
 
-from devices import Device
+from matter2mqtt.z2m.devices import Device
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

@@ -1,0 +1,50 @@
+dependencies:
+  cmd_system:
+    dependencies: []
+    source:
+      path: ../../../.espressif/v6.0/esp-idf/examples/system/console/advanced/components/cmd_system
+      type: local
+    version: '*'
+  espressif/iperf:
+    component_hash: 7ee222b87da6e69118814a1e04fbc6e0af6814cdd364f7f51cb58770d2478224
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.3'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 1.0.2
+  espressif/iperf-cmd:
+    component_hash: 112e912c230db6e8863194854950a83d8ed042101d9c57ebdfab8a505c8d8c21
+    dependencies:
+    - name: espressif/iperf
+      registry_url: https://components.espressif.com
+      require: private
+      version: =1.0.2
+    - name: idf
+      require: private
+      version: '>=4.3'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.2
+  idf:
+    source:
+      type: idf
+    version: 6.0.0
+  ot_examples_common:
+    dependencies:
+    - name: espressif/iperf-cmd
+      version: ^1.0.0
+    - name: cmd_system
+      path: ${IDF_PATH}/examples/system/console/advanced/components/cmd_system
+    source:
+      path: ../../../.espressif/v6.0/esp-idf/examples/openthread/ot_common_components/ot_examples_common
+      type: local
+    version: '*'
+direct_dependencies:
+- ot_examples_common
+manifest_hash: 698073e025b3fbc5e30a37861688911502bf1c998167e7719839830a80f9f60a
+target: esp32c6
+version: 3.0.0

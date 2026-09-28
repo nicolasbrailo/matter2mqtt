@@ -1,113 +1,22 @@
-"""Matter nodes -> zigbee2mqtt-style devices.
+"""Capabilities: one z2m property, and everything it knows about itself.
 
-A Device holds both the published schema (`info`, what goes to mt2m/bridge/devices) and
-the adapter that maps z2m properties onto Matter (`props`). Each property is a Cap, which
-is the single source of truth for it: it generates its `exposes` entry, reads its value
-from matter-server's attribute cache, and validates + executes writes. So the schema and
-the dispatcher can't drift apart.
+A Cap generates its own `exposes` entry, reads its value from matter-server's attribute
+cache, validates and coerces an incoming value, and executes the write as Matter commands.
+That keeps the published schema and the dispatcher from drifting apart: they're the same
+object. `endpoint_caps` decides which of them an endpoint gets.
 
-Published entry, one per commissioned node:
-{
-  "node_id": 1, "friendly_name": "...", "available": true,
-  "network": "thread",               # thread | wifi | ethernet | unknown
-  "manufacturer": "...", "vendor_id": 4107, "model": "...", "product_id": 1,
-  "serial_number": "...", "unique_id": "...", "software_version": "...", "hardware_version": "...",
-  "interview_completed": true, "interviewing": false, "last_interview": "...", "interview_version": 6,
-  "definition": {"vendor": "...", "model": "...", "description": "Extended Color Light",
-                 "supports_ota": true,
-                 "exposes": [ ... z2m-style exposes, each tagged with its "endpoint" ... ]},
-  "endpoints": {"1": {"device_types": ["Extended Color Light"], "clusters": ["OnOff", ...]}}
-}
-
-Values use z2m units, not Matter's raw ones: brightness 0..254, color_temp in mireds,
+Values are in z2m units, not Matter's raw ones: brightness 0..254, color_temp in mireds,
 color as hue 0..360 / saturation 0..100 and/or CIE x/y 0..1, temperature in °C, etc.
 """
-import dataclasses
-from collections import Counter
-
-from chip.clusters import ClusterObjects
 from chip.clusters import Objects as Clusters
-from chip.clusters.Types import Nullable
 
-# Cluster / attribute / bitmap ids, from the data model generated from the Matter spec
-# (chip.clusters), so a typo is an AttributeError at import instead of a silent None.
-DESCRIPTOR = Clusters.Descriptor.id
-BASIC_INFO = Clusters.BasicInformation.id
-ONOFF = Clusters.OnOff.id
-LEVEL = Clusters.LevelControl.id
-COLOR = Clusters.ColorControl.id
-THREAD_DIAG = Clusters.ThreadNetworkDiagnostics.id
-WIFI_DIAG = Clusters.WiFiNetworkDiagnostics.id
-ETHERNET_DIAG = Clusters.EthernetNetworkDiagnostics.id
-OTA_REQUESTOR = Clusters.OtaSoftwareUpdateRequestor.id
-POWER_SOURCE = Clusters.PowerSource.id
-SWITCH = Clusters.Switch.id
-
-DEVICE_TYPE_LIST = Clusters.Descriptor.Attributes.DeviceTypeList.attribute_id
-NODE_LABEL = Clusters.BasicInformation.Attributes.NodeLabel.attribute_id
-UNIQUE_ID = Clusters.BasicInformation.Attributes.UniqueID.attribute_id
-ON_OFF = Clusters.OnOff.Attributes.OnOff.attribute_id
-CURRENT_LEVEL = Clusters.LevelControl.Attributes.CurrentLevel.attribute_id
-MIN_LEVEL = Clusters.LevelControl.Attributes.MinLevel.attribute_id
-MAX_LEVEL = Clusters.LevelControl.Attributes.MaxLevel.attribute_id
-COLOR_CAPABILITIES = Clusters.ColorControl.Attributes.ColorCapabilities.attribute_id
-COLOR_TEMP_MIREDS = Clusters.ColorControl.Attributes.ColorTemperatureMireds.attribute_id
-COLOR_TEMP_MIN = Clusters.ColorControl.Attributes.ColorTempPhysicalMinMireds.attribute_id
-COLOR_TEMP_MAX = Clusters.ColorControl.Attributes.ColorTempPhysicalMaxMireds.attribute_id
-CURRENT_HUE = Clusters.ColorControl.Attributes.CurrentHue.attribute_id
-CURRENT_SATURATION = Clusters.ColorControl.Attributes.CurrentSaturation.attribute_id
-CURRENT_X = Clusters.ColorControl.Attributes.CurrentX.attribute_id
-CURRENT_Y = Clusters.ColorControl.Attributes.CurrentY.attribute_id
-COLOR_MODE = Clusters.ColorControl.Attributes.ColorMode.attribute_id
-
-COLOR_CAP = Clusters.ColorControl.Bitmaps.ColorCapabilitiesBitmap
-NUMBER_OF_POSITIONS = Clusters.Switch.Attributes.NumberOfPositions.attribute_id
-MULTI_PRESS_MAX = Clusters.Switch.Attributes.MultiPressMax.attribute_id
-FEATURE_MAP = Clusters.Switch.Attributes.FeatureMap.attribute_id
-SWITCH_EVENTS = Clusters.Switch.Events
-SWITCH_FEATURE = Clusters.Switch.Bitmaps.Feature
-
-BAT_OK = Clusters.PowerSource.Enums.BatChargeLevelEnum.kOk
-COLOR_MODE_ENUM = Clusters.ColorControl.Enums.ColorModeEnum
-# z2m names for Matter's ColorMode
-COLOR_MODES = {int(COLOR_MODE_ENUM.kCurrentHueAndCurrentSaturation): "hs",
-               int(COLOR_MODE_ENUM.kCurrentXAndCurrentY): "xy",
-               int(COLOR_MODE_ENUM.kColorTemperatureMireds): "color_temp"}
-OCCUPIED = Clusters.OccupancySensing.Bitmaps.OccupancyBitmap.kOccupied
-
-# Device type ids live in the spec's device library, which chip.clusters doesn't generate,
-# so these stay hand-written.
-DEVICE_TYPES = {
-    14: "Aggregator",
-    17: "Power Source",
-    19: "Bridged Node",
-    21: "Contact Sensor",
-    22: "Root Node",
-    256: "On/Off Light",
-    257: "Dimmable Light",
-    259: "On/Off Light Switch",
-    263: "Occupancy Sensor",
-    266: "On/Off Plug-in Unit",
-    267: "Dimmable Plug-in Unit",
-    268: "Color Temperature Light",
-    269: "Extended Color Light",
-    770: "Temperature Sensor",
-    773: "Pressure Sensor",
-    775: "Humidity Sensor",
-}
-LIGHT_TYPES = {256, 257, 268, 269}
-
-# BasicInformation attribute -> output key
-BASIC_INFO_FIELDS = {
-    Clusters.BasicInformation.Attributes.VendorName.attribute_id: "manufacturer",
-    Clusters.BasicInformation.Attributes.VendorID.attribute_id: "vendor_id",
-    Clusters.BasicInformation.Attributes.ProductName.attribute_id: "model",
-    Clusters.BasicInformation.Attributes.ProductID.attribute_id: "product_id",
-    Clusters.BasicInformation.Attributes.HardwareVersionString.attribute_id: "hardware_version",
-    Clusters.BasicInformation.Attributes.SoftwareVersionString.attribute_id: "software_version",
-    Clusters.BasicInformation.Attributes.SerialNumber.attribute_id: "serial_number",
-    UNIQUE_ID: "unique_id",
-}
+from ..matter.data_model import (
+    BAT_OK, COLOR, COLOR_CAP, COLOR_CAPABILITIES, COLOR_MODE, COLOR_MODES, COLOR_TEMP_MAX,
+    COLOR_TEMP_MIN, COLOR_TEMP_MIREDS, CURRENT_HUE, CURRENT_LEVEL, CURRENT_SATURATION,
+    CURRENT_X, CURRENT_Y, FEATURE_MAP, LEVEL, LIGHT_TYPES, MAX_LEVEL, MIN_LEVEL,
+    MULTI_PRESS_MAX, NUMBER_OF_POSITIONS, OCCUPIED, ON_OFF, ONOFF, SWITCH, SWITCH_EVENTS,
+    SWITCH_FEATURE, live_value, struct_field,
+)
 
 # z2m access bits
 PUBLISHED = 1
@@ -120,54 +29,6 @@ PRESS_NAMES = {1: "single", 2: "double", 3: "triple", 4: "quadruple", 5: "quintu
 
 def press_name(n):
     return PRESS_NAMES.get(n, f"{n}x")
-
-
-# A device's state goes to mt2m/<friendly_name>, so it can't be named like a bridge topic
-RESERVED_NAMES = {"bridge", "ping", "discover", "provision"}
-
-
-def cluster_name(cid):
-    cls = ClusterObjects.ALL_CLUSTERS.get(cid)
-    return cls.__name__ if cls is not None else f"cluster_{cid}"
-
-
-def attr_name(cid, aid):
-    cls = ClusterObjects.ALL_ATTRIBUTES.get(cid, {}).get(aid)
-    return cls.__name__ if cls is not None else f"attr_{aid}"
-
-
-def device_type_name(dt):
-    return DEVICE_TYPES.get(dt, f"0x{dt:04x}")
-
-
-def struct_tag(struct_cls, label):
-    """Field tag of a struct field, from the generated descriptor."""
-    return next(f.Tag for f in struct_cls.descriptor.Fields if f.Label == label)
-
-
-DEVICE_TYPE_FIELD = struct_tag(Clusters.Descriptor.Structs.DeviceTypeStruct, "deviceType")
-
-
-def struct_field(s, tag, name):
-    """matter-server hands structs over keyed by field tag (as str); accept names too."""
-    if not isinstance(s, dict):
-        return None
-    for k in (str(tag), tag, name):
-        if k in s:
-            return s[k]
-    return None
-
-
-def attr_tree(attrs):
-    """Flat {"ep/cid/aid": val} -> {ep: {cid: {aid: val}}}"""
-    tree = {}
-    for key, val in attrs.items():
-        try:
-            ep, cid, aid = (int(x) for x in key.split("/"))
-        except ValueError:
-            continue
-        tree.setdefault(ep, {}).setdefault(cid, {})[aid] = val
-    return tree
 
 
 def as_number(value):
@@ -191,55 +52,6 @@ def check_number(value, vmin=None, vmax=None):
     return None
 
 
-def valid_name(label):
-    if not isinstance(label, str) or not label.strip() or label in RESERVED_NAMES:
-        return False
-    if "+" in label or "#" in label:  # mqtt wildcards, not allowed in a publish topic
-        return False
-    return label.split("/")[-1] not in ("set", "get")  # mt2m/<name> would look like a request
-
-
-def json_safe(v):
-    """Attribute values as plain json: structs become objects, enums/bitmaps plain ints,
-    octet strings hex. Without this a struct would land in mqtt as its python repr."""
-    if v is None or isinstance(v, Nullable):
-        return None
-    if dataclasses.is_dataclass(v):
-        return {f.name: json_safe(getattr(v, f.name)) for f in dataclasses.fields(v)}
-    if isinstance(v, (list, tuple)):
-        return [json_safe(x) for x in v]
-    if isinstance(v, (bytes, bytearray)):
-        return v.hex()
-    if isinstance(v, bool):
-        return v
-    if isinstance(v, int):  # IntEnum / IntFlag included
-        return int(v)
-    return v
-
-
-def dump_node(node):
-    """Every attribute the node has, named: {endpoint: {cluster: {attribute: value}}}.
-
-    This is matter-discover.py's output as data, including the clusters the bridge has no
-    capability for. Values come from the live cache, names from the generated data model.
-    """
-    out = {}
-    for ep, clusters in sorted(attr_tree(node.node_data.attributes).items()):
-        eout = {}
-        for cid, attrs in sorted(clusters.items()):
-            vals = {}
-            for aid in sorted(attrs):
-                try:
-                    v = node.get_attribute_value(ep, cid, aid)
-                except KeyError:
-                    v = attrs[aid]  # not in the typed cache (unknown cluster): initial dump value
-                vals[attr_name(cid, aid)] = json_safe(v)
-            eout[cluster_name(cid)] = vals
-        out[str(ep)] = eout
-    return out
-
-
-# --- Capabilities -------------------------------------------------------------
 
 class Cap:
     """One z2m property on one endpoint. Subclasses define how it maps onto Matter."""
@@ -256,12 +68,7 @@ class Cap:
         return [f"{self.ep}/{cid}/{aid}" for cid, aid in self.attrs]
 
     def attr(self, node, cid, aid):
-        # The typed cluster objects get live updates; node_data.attributes is only the initial dump
-        try:
-            v = node.get_attribute_value(self.ep, cid, aid)
-        except KeyError:
-            return None
-        return None if isinstance(v, Nullable) else v
+        return live_value(node, self.ep, cid, aid)
 
     def base(self, type_):
         return {"type": type_, "name": self.name, "property": self.prop,
@@ -613,98 +420,3 @@ def endpoint_caps(ep, cl, device_types):
     return ("light" if is_light else "switch"), act, sens
 
 
-# --- Device -------------------------------------------------------------------
-
-class Device:
-    def __init__(self, node):
-        self.node = node
-        self.node_id = node.node_id
-        tree = attr_tree(node.node_data.attributes)
-        root = tree.get(0, {})
-        basic = root.get(BASIC_INFO, {})
-
-        label = basic.get(NODE_LABEL)
-        self.friendly_name = label if valid_name(label) else f"matter_{self.node_id}"
-        self.unique_id = basic.get(UNIQUE_ID)
-
-        endpoints = {}
-        groups = []  # (ep, kind, actuators, sensors)
-        device_types = []  # names, non-root endpoints, for definition.description
-        for ep in sorted(tree):
-            cl = tree[ep]
-            dts = [struct_field(d, DEVICE_TYPE_FIELD, "deviceType")
-                   for d in cl.get(DESCRIPTOR, {}).get(DEVICE_TYPE_LIST) or []]
-            dts = [dt for dt in dts if dt is not None]
-            endpoints[str(ep)] = {
-                "device_types": [device_type_name(dt) for dt in dts],
-                "clusters": [cluster_name(cid) for cid in sorted(cl)],
-            }
-            if ep != 0:
-                groups.append((ep, *endpoint_caps(ep, cl, dts)))
-                device_types.extend(endpoints[str(ep)]["device_types"])
-            else:
-                # PowerSource usually sits on the root endpoint, and battery is a device-level
-                # property in z2m, so take just that from endpoint 0
-                groups.append((ep, None, [], sensor_caps(ep, cl, only=BATTERY)))
-
-        # Like z2m, a property name repeated across endpoints gets suffixed: state_1, state_2
-        caps = [c for _, _, act, sens in groups for c in act + sens]
-        counts = Counter(c.name for c in caps)
-        for c in caps:
-            if counts[c.name] > 1:
-                c.prop = f"{c.name}_{c.ep}"
-        self.props = {c.prop: c for c in caps}
-
-        exposes = []
-        for ep, kind, act, sens in groups:
-            if act:
-                exposes.append({"type": kind, "endpoint": ep,
-                                "features": [e for c in act for e in c.expose()]})
-            exposes.extend(e for c in sens for e in c.expose())
-
-        if THREAD_DIAG in root:
-            network = "thread"
-        elif WIFI_DIAG in root:
-            network = "wifi"
-        elif ETHERNET_DIAG in root:
-            network = "ethernet"
-        else:
-            network = "unknown"
-
-        # Matter interviews a node (reads its whole data model) right after commissioning, but
-        # matter-server only hands a node to clients once that's done, so from here it's always
-        # finished -- there's no "interviewing" state to report. Hardcoded for z2m compatibility;
-        # last_interview / interview_version below are the real data.
-        self.info = {"node_id": self.node_id, "friendly_name": self.friendly_name,
-                     "available": node.available, "network": network,
-                     "interview_completed": True, "interviewing": False,
-                     "last_interview": node.node_data.last_interview,
-                     "interview_version": node.node_data.interview_version}
-        for aid, key in BASIC_INFO_FIELDS.items():
-            if aid in basic:
-                self.info[key] = basic[aid]
-        # z2m keeps what a device *is* (and can do) under `definition`, separate from the
-        # per-node facts above. vendor/model repeat manufacturer/model, as they do in z2m.
-        self.info["definition"] = {
-            "vendor": self.info.get("manufacturer"),
-            "model": self.info.get("model"),
-            "description": ", ".join(dict.fromkeys(device_types)) or None,
-            "supports_ota": OTA_REQUESTOR in root,
-            "exposes": exposes,
-        }
-        self.info["endpoints"] = endpoints
-
-    def state(self):
-        """Current z2m state, from matter-server's (live-updated) attribute cache. Momentary
-        properties (button actions) are events, so they're published separately, not here."""
-        return {prop: cap.read(self.node) for prop, cap in self.props.items() if not cap.momentary}
-
-    def action(self, endpoint_id, cluster_id, event_id, data):
-        """(property, action) for a Switch event on this node, or None if we don't publish it."""
-        if cluster_id != SWITCH:
-            return None
-        for prop, cap in self.props.items():
-            if isinstance(cap, ActionCap) and cap.ep == endpoint_id:
-                action = cap.event(event_id, data)
-                return None if action is None else (prop, action)
-        return None

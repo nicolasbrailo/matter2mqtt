@@ -1,4 +1,4 @@
-.PHONY: rebuild start start-bare bluez-proxy mqtt-proxy run-bridge stop shell logs
+.PHONY: rebuild start start-bare bluez-proxy mqtt-proxy sync-bridge run-bridge test-bridge stop shell logs
 
 NAME := mt2mqtt
 
@@ -109,15 +109,29 @@ mqtt-proxy:
 # ships a copy under /src, but editing that means a rebuild, so this syncs the source into
 # RUNDIR instead: it's bind-mounted at /mt2mqtt-run, so the container sees the edit
 # immediately. Runs in the FOREGROUND with the console attached -- the bridge logs to stdout
-# ([bridge]/[matter] lines) and Ctrl-C stops it.
+# ([bridge]/[matter]/[registry]/... lines) and Ctrl-C stops it.
+#
+# main.py is the entry point; it delegates to the matter2mqtt package next to it, so the
+# working directory has to be the sync directory (that's what puts the package on sys.path).
 #
 # Needs `make mqtt-proxy` in another terminal (the bridge's only path to the broker) and
 # matter-server up inside the container; without the latter it retries every 5s and says so.
-run-bridge:
-	mkdir -p '$(RUNDIR)/bridge2/fixtures'
-	cp $(CURDIR)/mqtt_bridge/*.py '$(RUNDIR)/bridge2/'
-	cp $(CURDIR)/mqtt_bridge/fixtures/*.json '$(RUNDIR)/bridge2/fixtures/'
-	docker exec -it $(CONTAINER) python3 /mt2mqtt-run/bridge2/bridge.py
+BRIDGE_DIR := /mt2mqtt-run/bridge2
+
+sync-bridge:
+	mkdir -p '$(RUNDIR)/bridge2'
+	rm -rf '$(RUNDIR)/bridge2/matter2mqtt' '$(RUNDIR)/bridge2/tests'
+	cp -r $(CURDIR)/mqtt_bridge/matter2mqtt $(CURDIR)/mqtt_bridge/tests \
+	      $(CURDIR)/mqtt_bridge/main.py '$(RUNDIR)/bridge2/'
+
+run-bridge: sync-bridge
+	docker exec -it -w $(BRIDGE_DIR) $(CONTAINER) python3 main.py
+
+# The offline tests (schema fixtures and the set/get rules), run against the container's own
+# matter-server library rather than whatever python the host has.
+test-bridge: sync-bridge
+	docker exec -it -w $(BRIDGE_DIR) $(CONTAINER) python3 tests/test_devices.py
+	docker exec -it -w $(BRIDGE_DIR) $(CONTAINER) python3 tests/test_control.py
 
 stop:
 	docker rm -f $(NAME)
