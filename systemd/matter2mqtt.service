@@ -1,0 +1,29 @@
+# The matter2mqtt container, run in the foreground so systemd supervises it and its output
+# lands in the journal. Not using docker's --restart policy on purpose: docker would start it
+# without waiting for the proxies, and would reuse the /dev/ttyACMx resolved at create time
+# even if the dongle re-enumerates. Here the dongle is resolved from its by-id name on every
+# start.
+[Unit]
+Description=matter2mqtt container (OTBR + matter-server + MQTT bridge)
+Requires=docker.service
+After=docker.service matter2mqtt-mqtt-proxy.socket matter2mqtt-bluez-proxy.service
+Wants=matter2mqtt-mqtt-proxy.socket matter2mqtt-bluez-proxy.service
+
+[Service]
+ExecStartPre=-/usr/bin/docker rm -f matter2mqtt
+ExecStart=/bin/sh -c '\
+  rcp=$$(readlink -e /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_*) \
+    || { echo "RCP dongle not found under /dev/serial/by-id" >&2; exit 1; }; \
+  exec /usr/bin/docker run --rm --name matter2mqtt \
+    --network none \
+    -v @RUNDIR@:/mt2mqtt-run \
+    -v /run/matter2mqtt-bluez-proxy:/mt2mqtt-run/bluez \
+    --device "$$rcp":/dev/ttyACM0 \
+    --device /dev/net/tun --cap-add NET_ADMIN \
+    @IMAGE@'
+ExecStop=/usr/bin/docker stop matter2mqtt
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

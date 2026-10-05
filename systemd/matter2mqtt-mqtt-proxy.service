@@ -1,0 +1,15 @@
+# Relays connections on matter2mqtt-mqtt-proxy.socket to the broker -- the single sanctioned
+# LAN crossing for the --network none container. Only ever talks to @BROKER@:@BROKER_PORT@.
+[Unit]
+Description=matter2mqtt: MQTT relay to @BROKER@:@BROKER_PORT@
+Requires=matter2mqtt-mqtt-proxy.socket
+After=matter2mqtt-mqtt-proxy.socket network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd @BROKER@:@BROKER_PORT@
+DynamicUser=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes

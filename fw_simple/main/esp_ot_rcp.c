@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include "led.h"
 #include "esp_event.h"
 #include "nvs_flash.h"
 #include "esp_openthread.h"
@@ -50,6 +51,9 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_ERROR_CHECK(esp_vfs_eventfd_register(&eventfd_config));
 
+    ESP_LOGI(TAG, "Hola! This is OT RCP FW " __DATE__ " " __TIME__);
+    c6_zero_led_blink(/*n=*/3, /*on_ms=*/100, /*off_ms=*/50, /*r=*/150, /*g=*/0,  /*b=*/150);
+
 #if CONFIG_ESP_COEX_EXTERNAL_COEXIST_ENABLE
     ot_external_coexist_init();
 #endif
@@ -68,6 +72,8 @@ void app_main(void)
     esp_console_init(&console_config);
     esp_console_register_help_command();
 #endif
+
+    c6_zero_led_blink(/*n=*/1, /*on_ms=*/100, /*off_ms=*/50, /*r=*/0, /*g=*/100,  /*b=*/0);
 
     ESP_ERROR_CHECK(esp_openthread_start(&config));
 }

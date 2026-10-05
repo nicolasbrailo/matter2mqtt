@@ -65,10 +65,10 @@ RUN apt-get install -y --no-install-recommends \
 # --- Env -----------------------------------------------------
 # Persistent mount for run config and settings (eg Thread network state).
 # This is meant to outlive the container: mount a host directory here at run time
+RUN mkdir /matter2mqtt-bin
 RUN mkdir /mt2mqtt-run
-RUN mkdir /mt2mqtt-bin
-RUN mkdir /src
-ENV PATH="/mt2mqtt-bin:${PATH}"
+RUN mkdir /matter2mqtt-src
+ENV PATH="/matter2mqtt-bin:${PATH}"
 
 # MQTT client for the matter->mqtt bridge
 RUN pip install --no-cache-dir paho-mqtt
@@ -86,12 +86,12 @@ RUN pip install --no-cache-dir pyserial
 # Docker caches this layer by instruction text, so pinning OTBR_REF also gives
 # correct cache behaviour: bump the ARG to force a re-clone.
 ARG OTBR_REF=582c551
-RUN git clone https://github.com/openthread/ot-br-posix.git /src/ot-br-posix \
-    && cd /src/ot-br-posix \
+RUN git clone https://github.com/openthread/ot-br-posix.git /matter2mqtt-src/ot-br-posix \
+    && cd /matter2mqtt-src/ot-br-posix \
     && git checkout ${OTBR_REF} \
     && git submodule update --init --recursive
 
-RUN mkdir /src/ot-br-posix/build && cd /src/ot-br-posix/build && cmake -GNinja \
+RUN mkdir /matter2mqtt-src/ot-br-posix/build && cd /matter2mqtt-src/ot-br-posix/build && cmake -GNinja \
     -DOTBR_INFRA_IF_NAME=lo \
     -DOTBR_BORDER_ROUTING=ON \
     -DOTBR_BACKBONE_ROUTER=OFF \
@@ -99,37 +99,37 @@ RUN mkdir /src/ot-br-posix/build && cd /src/ot-br-posix/build && cmake -GNinja \
     -DOTBR_WEB=OFF \
     -DOTBR_REST=ON \
     -DOTBR_DBUS=ON \
-    -DOTBR_VENDOR_NAME="NicoMT2M" \
-    -DOTBR_PRODUCT_NAME="NicoMT2M-otbr" \
+    -DOTBR_VENDOR_NAME="NicoMatter2Mqtt" \
+    -DOTBR_PRODUCT_NAME="NicoMatter2Mqtt-otbr" \
     -DOT_POSIX_SETTINGS_PATH='"/mt2mqtt-run/otbr/"' \
-    /src/ot-br-posix/
-RUN cd /src/ot-br-posix/build && ninja
+    /matter2mqtt-src/ot-br-posix/
+RUN cd /matter2mqtt-src/ot-br-posix/build && ninja
 
 # --- D-Bus policy -----------------------------------------------------------
 # Built with OTBR_DBUS=ON, so otbr-agent tries to own io.openthread.BorderRouter.wpan0
 # on the system bus.
 RUN install -D -m 644 \
-      /src/ot-br-posix/build/src/agent/otbr-agent.conf \
+      /matter2mqtt-src/ot-br-posix/build/src/agent/otbr-agent.conf \
       /etc/dbus-1/system.d/otbr-agent.conf
 
 # Make ot-br bins available through path
-RUN ln -s /src/ot-br-posix/build/third_party/openthread/repo/src/posix/ot-ctl /mt2mqtt-bin
-RUN ln -s /src/ot-br-posix/build/src/agent/otbr-agent /mt2mqtt-bin
+RUN ln -s /matter2mqtt-src/ot-br-posix/build/third_party/openthread/repo/src/posix/ot-ctl /matter2mqtt-bin
+RUN ln -s /matter2mqtt-src/ot-br-posix/build/src/agent/otbr-agent /matter2mqtt-bin
 
 
 #
 # Install python-matter-server
 #
 # Clone a repo with certs we can use for provisioning
-RUN mkdir -p /src/connectedhomeip
-RUN git clone --depth 1 --filter=blob:none --sparse https://github.com/project-chip/connectedhomeip /src/connectedhomeip
-RUN git -C /src/connectedhomeip sparse-checkout set credentials/production/paa-root-certs
+RUN mkdir -p /matter2mqtt-src/connectedhomeip
+RUN git clone --depth 1 --filter=blob:none --sparse https://github.com/project-chip/connectedhomeip /matter2mqtt-src/connectedhomeip
+RUN git -C /matter2mqtt-src/connectedhomeip sparse-checkout set credentials/production/paa-root-certs
 
 # matter-server treats --paa-root-cert-dir as its own cache: with no .version marker it deletes
 # every cert in there ("old store"), then refills from the DCL -- which our --network none
 # container can't reach, leaving an empty trust store and every commissioning failing device
 # attestation. The marker makes it leave the checked-out certs alone.
-RUN echo 1 > /src/connectedhomeip/credentials/production/paa-root-certs/.version
+RUN echo 1 > /matter2mqtt-src/connectedhomeip/credentials/production/paa-root-certs/.version
 
 # Make the matter-server module available in system python
 RUN pip install --no-cache-dir "python-matter-server[server]"
@@ -166,17 +166,20 @@ ENTRYPOINT ["/init"]
 
 
 ## TODO: fw host driver
-COPY fw/host_driver /src/fw/host_driver
-RUN make -C /src/fw/host_driver
-RUN ln -s /src/fw/host_driver/host /mt2mqtt-bin/spinel_bt_mux_driver
+COPY --from=host_driver . /matter2mqtt-src/fw/host_driver
+RUN make -C /matter2mqtt-src/fw/host_driver
+RUN ln -s /matter2mqtt-src/fw/host_driver/host /matter2mqtt-bin/spinel_bt_mux_driver
 
-## TODO: proxy mqtt
-COPY mqtt_bridge /src/
+# --- Matter->MQTT bridge ------------------------------------------------------
+# Run by the s6 `mqtt-bridge` service. This is the copy baked into the image; during
+# development `make redeploy-bridge` drops a live copy into the run dir, which the service
+# prefers when present (see s6-rc.d/mqtt-bridge/run). Copied late: it changes often.
+COPY --from=mqtt_bridge . /matter2mqtt-src/mqtt_bridge
 
-# Helper scripts (e.g. bt-host-check.sh) onto PATH via /mt2mqtt-bin. Copied late
+# Helper scripts (e.g. bt-host-check.sh) onto PATH via /matter2mqtt-bin. Copied late
 # so editing them doesn't bust the heavy build layers.
-COPY scripts/ /mt2mqtt-bin/
-RUN chmod +x /mt2mqtt-bin/*.sh /mt2mqtt-bin/*.py
+COPY scripts/ /matter2mqtt-bin/
+RUN chmod +x /matter2mqtt-bin/*.sh /matter2mqtt-bin/*.py
 
 
 # -- Cleanup

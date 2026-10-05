@@ -16,7 +16,7 @@ MATTER_URL = "ws://127.0.0.1:5580/ws"
 RECONNECT_DELAY = 5
 OT_CTL_DATASET = ("ot-ctl", "dataset", "active", "-x")
 # Must match --paa-root-cert-dir in s6-overlay/s6-rc.d/matter-server/run
-PAA_ROOT_CERT_DIR = Path("/src/connectedhomeip/credentials/production/paa-root-certs")
+PAA_ROOT_CERT_DIR = Path("/matter2mqtt-src/connectedhomeip/credentials/production/paa-root-certs")
 
 
 def log(msg):

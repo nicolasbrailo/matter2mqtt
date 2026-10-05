@@ -1,0 +1,31 @@
+# Filtered D-Bus proxy exposing ONLY org.bluez to the container, so matter-server can
+# commission over the host's bluetoothd without seeing the whole host system bus.
+# matter-server only probes for BlueZ when it starts, so this has to be up (socket
+# created) before matter2mqtt.service starts; ExecStartPost waits for the socket.
+#
+# Runs as a dynamic user: BlueZ's D-Bus policy lets any user talk to org.bluez. A dynamic
+# user can't write into @RUNDIR@, so the socket lives in this unit's
+# RuntimeDirectory (/run/matter2mqtt-bluez-proxy, owned by the dynamic user) and
+# matter2mqtt.service mounts that directory at /mt2mqtt-run/bluez in the container.
+# RuntimeDirectoryPreserve keeps the directory (and so the container's mount of it) across
+# proxy restarts.
+[Unit]
+Description=matter2mqtt: filtered BlueZ D-Bus proxy
+Requires=dbus.service
+After=dbus.service bluetooth.service
+Wants=bluetooth.service
+
+[Service]
+DynamicUser=yes
+RuntimeDirectory=matter2mqtt-bluez-proxy
+RuntimeDirectoryPreserve=yes
+ExecStartPre=/bin/rm -f /run/matter2mqtt-bluez-proxy/bluez-proxy.sock
+ExecStart=/usr/bin/xdg-dbus-proxy unix:path=/run/dbus/system_bus_socket /run/matter2mqtt-bluez-proxy/bluez-proxy.sock --filter --talk=org.bluez
+ExecStartPost=/usr/bin/timeout 10 /bin/sh -c 'until [ -S /run/matter2mqtt-bluez-proxy/bluez-proxy.sock ]; do sleep 0.1; done'
+ExecStopPost=/bin/rm -f /run/matter2mqtt-bluez-proxy/bluez-proxy.sock
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

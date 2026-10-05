@@ -1,0 +1,12 @@
+# Unix socket the container's MQTT bridge connects to (paho transport="unix"). systemd owns
+# the socket, so it exists from boot and is cleaned up on stop; each connection activates
+# matter2mqtt-mqtt-proxy.service, which relays it to the LAN broker. Replaces `make mqtt-proxy`.
+[Unit]
+Description=matter2mqtt: MQTT relay socket
+
+[Socket]
+ListenStream=@RUNDIR@/mqtt.sock
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

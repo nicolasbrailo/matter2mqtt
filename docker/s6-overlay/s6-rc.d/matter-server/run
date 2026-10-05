@@ -5,7 +5,7 @@ exec 2>&1                         # fold stderr into stdout so matter-server-log
 
 args=(
     --storage-path /mt2mqtt-run/matter-server-data
-    --paa-root-cert-dir /src/connectedhomeip/credentials/production/paa-root-certs
+    --paa-root-cert-dir /matter2mqtt-src/connectedhomeip/credentials/production/paa-root-certs
     --listen-address 127.0.0.1
     --port 5580
 )
@@ -20,7 +20,7 @@ args=(
 #    container's own bluetoothd on the container's own system bus.
 # 3. Neither: run as an operational bridge, no BLE and no commissioning.
 
-HOST_BUS=/mt2mqtt-run/bluez-proxy.sock
+HOST_BUS=/mt2mqtt-run/bluez/bluez-proxy.sock
 if bt-host-check.sh "$HOST_BUS"; then
     echo "[matter-server] host BlueZ present on $HOST_BUS: BLE via host bluetoothd"
     export DBUS_SYSTEM_BUS_ADDRESS="unix:path=$HOST_BUS"

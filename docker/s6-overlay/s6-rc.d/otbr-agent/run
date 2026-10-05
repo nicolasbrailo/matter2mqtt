@@ -8,5 +8,5 @@
 set -euo pipefail
 
 exec 2>&1                         # fold stderr into stdout so otbr-agent-log captures it
-exec /mt2mqtt-bin/otbr-agent -I wpan0 -B ot-infra -v -d 7 \
+exec /matter2mqtt-bin/otbr-agent -I wpan0 -B ot-infra -v -d 7 \
     'spinel+hdlc+uart:///dev/ttyACM0?uart-baudrate=460800'

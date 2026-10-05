@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Logger for the mqtt-bridge service. s6 pipes mqtt-bridge's stdout into here;
+# s6-log writes rotated, timestamped files to /mt2mqtt-run/logs/mqtt-bridge/current.
+# All service logs live under /mt2mqtt-run/logs (in the bind-mounted run dir) so
+# they show on the host.
+#   n5        keep 5 rotated files
+#   s10000000 rotate at ~10 MB
+set -euo pipefail
+
+LOGDIR=/mt2mqtt-run/logs/mqtt-bridge
+mkdir -p "$LOGDIR"                     # make the dir ourselves so the symlink has a home
+ln -sf current "$LOGDIR/mqtt-bridge.log"  # stable .log handle to the live log; survives rotation
+exec s6-log -b n5 s10000000 "$LOGDIR"
