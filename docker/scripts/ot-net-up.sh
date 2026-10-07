@@ -32,5 +32,5 @@ for _ in $(seq 1 "$ATTEMPTS"); do
     sleep "$INTERVAL"
 done
 
-echo "[ot-net-up] timed out waiting to attach to mesh, check logs in /mt2mqtt-run/logs/otbr-agent" >&2
+echo "[ot-net-up] timed out waiting to attach to mesh, check logs in /matter2mqtt-run/logs/otbr-agent" >&2
 exit 1

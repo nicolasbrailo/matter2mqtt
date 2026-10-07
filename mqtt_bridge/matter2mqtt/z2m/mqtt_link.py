@@ -10,7 +10,7 @@ import json
 
 import paho.mqtt.client as mqtt
 
-SOCKET = "/mt2mqtt-run/mqtt.sock"
+SOCKET = "/matter2mqtt-run/mqtt.sock"
 TOPIC = "mt2m"
 DEVICES_TOPIC = f"{TOPIC}/bridge/devices"
 BRIDGE_STATE_TOPIC = f"{TOPIC}/bridge/state"

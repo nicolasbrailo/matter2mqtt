@@ -20,8 +20,8 @@
 set -uo pipefail
 exec 2>&1                          # merge stderr into stdout -> rcp-watchdog-log
 
-MARKER=/mt2mqtt-run/rcp-wedged
-OTBR_LOG=/mt2mqtt-run/logs/otbr-agent/current
+MARKER=/matter2mqtt-run/rcp-wedged
+OTBR_LOG=/matter2mqtt-run/logs/otbr-agent/current
 OTBR_SVC=/run/service/otbr-agent
 RCP_PORT=/dev/ttyACM0              # as mapped by `docker run --device`
 POLL=10                            # seconds between health checks

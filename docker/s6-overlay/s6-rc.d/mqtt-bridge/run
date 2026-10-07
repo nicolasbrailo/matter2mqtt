@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Matter->MQTT bridge. Talks to matter-server on 127.0.0.1:5580 and to the LAN broker via
-# the host's relay socket at /mt2mqtt-run/mqtt.sock. It retries both on its own, so it only
+# the host's relay socket at /matter2mqtt-run/mqtt.sock. It retries both on its own, so it only
 # needs matter-server started, not ready.
 #
 # Runs the copy baked into the image, unless a dev copy has been deployed into the run dir
@@ -10,7 +10,7 @@ set -euo pipefail
 exec 2>&1                         # fold stderr into stdout so mqtt-bridge-log captures it
 
 BAKED=/matter2mqtt-src/mqtt_bridge
-DEV=/mt2mqtt-run/bridge2
+DEV=/matter2mqtt-run/bridge2
 
 if [ -f "$DEV/main.py" ]; then
     echo "[mqtt-bridge] running DEV copy from $DEV, not the image's"

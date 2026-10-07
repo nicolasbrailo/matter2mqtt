@@ -13,7 +13,7 @@ rebuild:
 # starting it on a dev box would kill a `make -C docker start` container. Start with
 #   sudo systemctl start matter2mqtt.service
 # (pulls in both proxies). SYSTEMD_RUNDIR is the host state dir (Thread network, logs, MQTT
-# socket); it's mounted at /mt2mqtt-run in the container. Re-run after editing a template.
+# socket); it's mounted at /matter2mqtt-run in the container. Re-run after editing a template.
 # Needs xdg-dbus-proxy on the host.
 SYSTEMD_RUNDIR ?= $(HOME)/run/matter2mqtt
 IMAGE          ?= matter2mqtt:dev

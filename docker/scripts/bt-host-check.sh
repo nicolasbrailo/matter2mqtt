@@ -8,11 +8,11 @@
 # not enough — the proxy can be up while bluetoothd / the adapter are down.
 #
 # Usage:  bt-host-check.sh [SOCKET_PATH]
-#           SOCKET_PATH defaults to /mt2mqtt-run/bluez/bluez-proxy.sock
+#           SOCKET_PATH defaults to /matter2mqtt-run/bluez/bluez-proxy.sock
 # Exit:   0 = host BlueZ usable (enable BLE);  1 = not (socket missing / org.bluez unowned)
 set -uo pipefail
 
-HOST_BUS="${1:-/mt2mqtt-run/bluez/bluez-proxy.sock}"
+HOST_BUS="${1:-/matter2mqtt-run/bluez/bluez-proxy.sock}"
 
 [ -S "$HOST_BUS" ] || exit 1
 

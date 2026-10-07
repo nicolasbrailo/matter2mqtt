@@ -1,13 +1,19 @@
-.PHONY: rebuild start start-bare bluez-proxy mqtt-proxy sync-bridge redeploy-bridge undeploy-bridge bridge-logs test-bridge stop shell logs
+.PHONY: rebuild start start-bare bluez-proxy mqtt-proxy sync-bridge redeploy-bridge undeploy-bridge bridge-logs test-bridge stop shell logs need-container
 
+.DEFAULT_GOAL := rebuild
 NAME := matter2mqtt
 
 # shell/logs attach to the running container (only `matter2mqtt` now -- commissioning
 # is no longer a separate mode; see `start`).
 CONTAINER = $(shell docker ps --format '{{.Names}}' | grep -E '^$(NAME)$$' | head -1)
 
-# Host directory bind-mounted at /mt2mqtt-run so Thread network state, the
-# per-service logs under /mt2mqtt-run/logs, and any future editable configs
+# Prerequisite for targets that docker exec into the container: fail with a readable message
+# instead of docker's "requires at least 2 arguments" when it isn't running.
+need-container:
+	@test -n '$(CONTAINER)' || { echo "No running $(NAME) container. Start it with 'sudo systemctl start matter2mqtt' or 'make start'." >&2; exit 1; }
+
+# Host directory bind-mounted at /matter2mqtt-run so Thread network state, the
+# per-service logs under /matter2mqtt-run/logs, and any future editable configs
 # survive `make stop` (which does `docker rm -f`) and can be backed up directly
 # from the host. Override with `make start RUNDIR=...`.
 RUNDIR := $(HOME)/run/matter2mqtt
@@ -27,7 +33,7 @@ RCP      := $(shell readlink -f '$(RCP_BYID)')
 # The container runs fully isolated (its own netns: wpan0, avahi and its own
 # system dbus never touch the LAN) AND can commission over BLE. It reaches the
 # HOST's BlueZ over a FILTERED D-Bus proxy (see `bluez-proxy` below): the proxy
-# socket lives in RUNDIR, so it rides the existing /mt2mqtt-run mount -- no
+# socket lives in RUNDIR, so it rides the existing /matter2mqtt-run mount -- no
 # separate bind, and the container never sees the raw host system bus. The host's
 # bluetoothd does all radio work in init_net; only BTP-over-GATT D-Bus traffic
 # crosses. matter-server/run detects a usable BlueZ on that proxy (org.bluez
@@ -38,7 +44,7 @@ start:
 	mkdir -p '$(RUNDIR)/logs'
 	docker run -d --name $(NAME) \
 		--network none \
-		-v '$(RUNDIR)':/mt2mqtt-run \
+		-v '$(RUNDIR)':/matter2mqtt-run \
 		--device $(RCP):/dev/ttyACM0 \
 		--device /dev/net/tun --cap-add NET_ADMIN \
 		matter2mqtt:dev
@@ -58,7 +64,7 @@ start-bare:
 	docker run -it --rm --name $(NAME) \
 		--security-opt apparmor=unconfined \
 		--entrypoint /bin/bash \
-		-v '$(RUNDIR)':/mt2mqtt-run \
+		-v '$(RUNDIR)':/matter2mqtt-run \
 		--device $(RCP):/dev/ttyACM0 \
 		--device /dev/net/tun --cap-add NET_ADMIN \
 		matter2mqtt:dev
@@ -73,7 +79,7 @@ start-bare:
 # at_console, the same grant the desktop BT applet uses to scan/connect). Leave
 # it running in its own terminal while commissioning; Ctrl-C when done. The
 # socket lives in RUNDIR, so it appears in the container at
-# /mt2mqtt-run/bluez/bluez-proxy.sock via the existing mount -- matter-server/run picks
+# /matter2mqtt-run/bluez/bluez-proxy.sock via the existing mount -- matter-server/run picks
 # it up automatically. When it's not running, `make start` is operational-only.
 bluez-proxy:
 	mkdir -p '$(RUNDIR)/bluez'
@@ -90,7 +96,7 @@ BROKER_PORT ?= 1883
 # Host-side MQTT relay -- the single sanctioned LAN crossing. The container runs
 # --network none, so its only path to the LAN broker is a unix socket bridged by
 # a host process. socat listens on a unix socket in RUNDIR (rides the existing
-# /mt2mqtt-run mount, so it's /mt2mqtt-run/mqtt.sock inside the container) and
+# /matter2mqtt-run mount, so it's /matter2mqtt-run/mqtt.sock inside the container) and
 # forwards each connection to the broker. The container's bridge connects with
 # paho transport="unix" -- no container-side relay needed.
 #
@@ -107,7 +113,7 @@ mqtt-proxy:
 		TCP:$(BROKER):$(BROKER_PORT)
 
 # Matter->MQTT bridge. It runs as the s6 `mqtt-bridge` service, from the copy baked into the
-# image -- unless a dev copy exists at /mt2mqtt-run/bridge2, which the service runs instead.
+# image -- unless a dev copy exists at /matter2mqtt-run/bridge2, which the service runs instead.
 # These targets manage that dev copy, so iterating on the bridge is stop/sync/start rather
 # than a full image rebuild. Output goes to $(RUNDIR)/logs/mqtt-bridge; `make bridge-logs`
 # follows it. Needs `make mqtt-proxy` in another terminal (the bridge's only path to the
@@ -115,23 +121,23 @@ mqtt-proxy:
 #
 # The container runs the bridge as root, so Python leaves root-owned __pycache__ dirs in the
 # dev copy; sync-bridge deletes the old copy from inside the container for that reason.
-BRIDGE_DIR := /mt2mqtt-run/bridge2
+BRIDGE_DIR := /matter2mqtt-run/bridge2
 BRIDGE_SVC := /run/service/mqtt-bridge
 
-sync-bridge:
+sync-bridge: need-container
 	docker exec $(CONTAINER) rm -rf $(BRIDGE_DIR)
 	mkdir -p '$(RUNDIR)/bridge2'
 	cp -r $(CURDIR)/../mqtt_bridge/matter2mqtt $(CURDIR)/../mqtt_bridge/tests \
 	      $(CURDIR)/../mqtt_bridge/main.py '$(RUNDIR)/bridge2/'
 
 # Stop the service, swap in the working tree's bridge, start it again.
-redeploy-bridge:
+redeploy-bridge: need-container
 	docker exec $(CONTAINER) /command/s6-svc -wd -d $(BRIDGE_SVC)
 	$(MAKE) sync-bridge
 	docker exec $(CONTAINER) /command/s6-svc -u $(BRIDGE_SVC)
 
 # Drop the dev copy and go back to running the image's bridge.
-undeploy-bridge:
+undeploy-bridge: need-container
 	docker exec $(CONTAINER) /command/s6-svc -wd -d $(BRIDGE_SVC)
 	docker exec $(CONTAINER) rm -rf $(BRIDGE_DIR)
 	docker exec $(CONTAINER) /command/s6-svc -u $(BRIDGE_SVC)
@@ -150,7 +156,7 @@ stop:
 	docker rm -f $(NAME)
 
 # Attach an interactive shell to the already-running container.
-shell:
+shell: need-container
 	docker exec -it $(CONTAINER) bash
 
 # Tail every service log under $(RUNDIR)/logs. The s6 loggers each expose a stable

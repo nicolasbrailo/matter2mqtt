@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Logger for the dbus service. s6 pipes dbus's stdout into here; s6-log writes
-# rotated, timestamped files to /mt2mqtt-run/logs/dbus/current. All service logs
-# live under /mt2mqtt-run/logs (in the bind-mounted run dir) so they show on the host.
+# rotated, timestamped files to /matter2mqtt-run/logs/dbus/current. All service logs
+# live under /matter2mqtt-run/logs (in the bind-mounted run dir) so they show on the host.
 #   n5       keep 5 rotated files
 #   s1000000 rotate at ~1 MB
 set -euo pipefail
 
-LOGDIR=/mt2mqtt-run/logs/dbus
+LOGDIR=/matter2mqtt-run/logs/dbus
 mkdir -p "$LOGDIR"                     # make the dir ourselves so the symlink has a home
 ln -sf current "$LOGDIR/dbus.log"     # stable .log handle to the live log; survives rotation
 exec s6-log -b n5 s1000000 "$LOGDIR"

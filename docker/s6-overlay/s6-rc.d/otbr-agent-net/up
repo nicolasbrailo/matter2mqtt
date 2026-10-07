@@ -11,7 +11,7 @@
 # bare '$(...)' / '$' (no '${...}', which execline would try to expand) and
 # avoid backslash escapes like '\n' (execline would turn them into real chars).
 bash -c "
-  mkdir -p /mt2mqtt-run/logs
-  exec >> /mt2mqtt-run/logs/otbr-agent-net.log 2>&1
+  mkdir -p /matter2mqtt-run/logs
+  exec >> /matter2mqtt-run/logs/otbr-agent-net.log 2>&1
   exec ot-net-up.sh
 "

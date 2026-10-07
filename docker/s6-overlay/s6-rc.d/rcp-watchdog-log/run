@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Logger for the rcp-watchdog service. s6 pipes rcp-watchdog's stdout into here;
-# s6-log writes rotated, timestamped files to /mt2mqtt-run/logs/rcp-watchdog/current.
-# All service logs live under /mt2mqtt-run/logs (in the bind-mounted run dir) so
+# s6-log writes rotated, timestamped files to /matter2mqtt-run/logs/rcp-watchdog/current.
+# All service logs live under /matter2mqtt-run/logs (in the bind-mounted run dir) so
 # they show on the host. Worth keeping on disk: this is the record of when the
 # RCP wedged and whether the reset brought it back.
 #   n5        keep 5 rotated files
 #   s10000000 rotate at ~10 MB
 set -euo pipefail
 
-LOGDIR=/mt2mqtt-run/logs/rcp-watchdog
+LOGDIR=/matter2mqtt-run/logs/rcp-watchdog
 mkdir -p "$LOGDIR"                       # make the dir ourselves so the symlink has a home
 ln -sf current "$LOGDIR/rcp-watchdog.log"  # stable .log handle to the live log; survives rotation
 exec s6-log -b n5 s10000000 "$LOGDIR"

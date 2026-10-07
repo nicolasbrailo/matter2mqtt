@@ -6,7 +6,7 @@
 # Runs as a dynamic user: BlueZ's D-Bus policy lets any user talk to org.bluez. A dynamic
 # user can't write into @RUNDIR@, so the socket lives in this unit's
 # RuntimeDirectory (/run/matter2mqtt-bluez-proxy, owned by the dynamic user) and
-# matter2mqtt.service mounts that directory at /mt2mqtt-run/bluez in the container.
+# matter2mqtt.service mounts that directory at /matter2mqtt-run/bluez in the container.
 # RuntimeDirectoryPreserve keeps the directory (and so the container's mount of it) across
 # proxy restarts.
 [Unit]

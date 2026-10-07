@@ -1,7 +1,7 @@
 bash -c "
   set -euo pipefail
-  mkdir -p /mt2mqtt-run/logs
-  exec >> /mt2mqtt-run/logs/ot-infra.log 2>&1
+  mkdir -p /matter2mqtt-run/logs
+  exec >> /matter2mqtt-run/logs/ot-infra.log 2>&1
   # Under --network none the container has only loopback, and it may come up
   # DOWN. matter-server binds 127.0.0.1:5580 (and matter-ws-check.py dials it),
   # so ensure lo is up before anything needs it. Idempotent if already up.

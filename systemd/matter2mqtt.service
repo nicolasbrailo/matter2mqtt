@@ -16,8 +16,8 @@ ExecStart=/bin/sh -c '\
     || { echo "RCP dongle not found under /dev/serial/by-id" >&2; exit 1; }; \
   exec /usr/bin/docker run --rm --name matter2mqtt \
     --network none \
-    -v @RUNDIR@:/mt2mqtt-run \
-    -v /run/matter2mqtt-bluez-proxy:/mt2mqtt-run/bluez \
+    -v @RUNDIR@:/matter2mqtt-run \
+    -v /run/matter2mqtt-bluez-proxy:/matter2mqtt-run/bluez \
     --device "$$rcp":/dev/ttyACM0 \
     --device /dev/net/tun --cap-add NET_ADMIN \
     @IMAGE@'

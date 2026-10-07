@@ -66,7 +66,7 @@ RUN apt-get install -y --no-install-recommends \
 # Persistent mount for run config and settings (eg Thread network state).
 # This is meant to outlive the container: mount a host directory here at run time
 RUN mkdir /matter2mqtt-bin
-RUN mkdir /mt2mqtt-run
+RUN mkdir /matter2mqtt-run
 RUN mkdir /matter2mqtt-src
 ENV PATH="/matter2mqtt-bin:${PATH}"
 
@@ -101,7 +101,7 @@ RUN mkdir /matter2mqtt-src/ot-br-posix/build && cd /matter2mqtt-src/ot-br-posix/
     -DOTBR_DBUS=ON \
     -DOTBR_VENDOR_NAME="NicoMatter2Mqtt" \
     -DOTBR_PRODUCT_NAME="NicoMatter2Mqtt-otbr" \
-    -DOT_POSIX_SETTINGS_PATH='"/mt2mqtt-run/otbr/"' \
+    -DOT_POSIX_SETTINGS_PATH='"/matter2mqtt-run/otbr/"' \
     /matter2mqtt-src/ot-br-posix/
 RUN cd /matter2mqtt-src/ot-br-posix/build && ninja
 
@@ -140,7 +140,7 @@ RUN apt-get install -y --no-install-recommends \
 
 # /data is a hardcoded path in matter-server
 RUN mkdir /data
-RUN ln -s /data /mt2mqtt-run/matter-server-data
+RUN ln -s /data /matter2mqtt-run/matter-server-data
 
 
 # --- s6-overlay: lightweight container init / process supervisor ------------
