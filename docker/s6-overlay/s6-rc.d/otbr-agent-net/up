@@ -5,21 +5,22 @@
 # scripts/ot-net-up.sh, shared with rcp-watchdog (which redoes it after it
 # resets a wedged RCP); all this wrapper adds is the logfile. A non-zero exit
 # (timeout) makes s6-rc mark this oneshot failed, so anything depending on it
-# won't start.
+# won't start. With no Thread network it logs how to create one and succeeds.
 #
 # Notes for editing: this runs through execline first, so keep '$' usages to
 # bare '$(...)' / '$' (no '${...}', which execline would try to expand) and
 # avoid backslash escapes like '\n' (execline would turn them into real chars).
 #
 # TEE_TO_CONTAINER=1 also copies the log to the container's stdout as
-# '<prio>otbr-agent-net: message' (see the *-log/run loggers): the timeout is err,
-# attaching is notice, the rest info. A oneshot runs once at boot, so unlike the
-# loggers this only changes with an image rebuild.
+# '<prio>otbr-agent-net: message' (see the *-log/run loggers): the no-network
+# notice is crit, the timeouts err, warnings warning, attaching notice, the rest
+# info. A oneshot runs once at boot, so unlike
+# the loggers this only changes with an image rebuild.
 bash -c "
   TEE_TO_CONTAINER=1
   mkdir -p /matter2mqtt-run/logs
   if [ $TEE_TO_CONTAINER = 1 ]; then
-    exec > >(tee -a /matter2mqtt-run/logs/otbr-agent-net.log | sed -u -e 's/^[[]ot-net-up[]] //' -e '/timed out/s/^/<3>/' -e '/attached to mesh/s/^/<5>/' -e '/^<[0-9]>/!s/^/<6>/' -e 's/^<[0-9]>/&otbr-agent-net: /') 2>&1
+    exec > >(tee -a /matter2mqtt-run/logs/otbr-agent-net.log | sed -u -E -e 's/^[[]ot-net-[a-z]*[]] //' -e '/^NO THREAD NETWORK/s/^/<2>/' -e '/^<[0-9]>/!{/^warning:/s/^/<4>/}' -e '/^<[0-9]>/!{/timed out|did not answer/s/^/<3>/}' -e '/^<[0-9]>/!{/attached to mesh/s/^/<5>/}' -e '/^<[0-9]>/!s/^/<6>/' -e 's/^<[0-9]>/&otbr-agent-net: /') 2>&1
   else
     exec >> /matter2mqtt-run/logs/otbr-agent-net.log 2>&1
   fi

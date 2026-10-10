@@ -28,7 +28,7 @@ to_container() {
         # except the ot-net-up timeout.
         {
             p = 6
-            if      ($0 ~ /resets failed/)                     p = 2
+            if      ($0 ~ /resets failed|NO THREAD NETWORK/)   p = 2
             else if ($0 ~ /RCP WEDGED|still wedged/)           p = 3
             else if ($0 ~ /not answering|unhealthy|reported failure|backing off|timed out/) p = 4
             else if ($0 ~ /recovery attempt|recovered|responding again/) p = 5

@@ -1,4 +1,4 @@
-.PHONY: rebuild start start-bare bluez-proxy mqtt-proxy sync-bridge redeploy-bridge undeploy-bridge bridge-logs test-bridge stop shell logs need-container
+.PHONY: rebuild start start-bare bluez-proxy mqtt-proxy sync-bridge redeploy-bridge undeploy-bridge bridge-logs test-bridge stop shell logs need-container new-network
 
 .DEFAULT_GOAL := rebuild
 NAME := matter2mqtt
@@ -151,6 +151,11 @@ bridge-logs:
 test-bridge: sync-bridge
 	docker exec -it -w $(BRIDGE_DIR) $(CONTAINER) python3 tests/test_devices.py
 	docker exec -it -w $(BRIDGE_DIR) $(CONTAINER) python3 tests/test_control.py
+
+# Create a Thread network when the container reports there is none (otbr-agent-net logs
+# "NO THREAD NETWORK" at boot). Refuses if one already exists.
+new-network: need-container
+	docker exec $(CONTAINER) ot-net-new.sh
 
 stop:
 	docker rm -f $(NAME)

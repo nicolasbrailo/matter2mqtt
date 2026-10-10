@@ -22,12 +22,12 @@ ExecStart=/bin/sh -c '\
     --device /dev/net/tun --cap-add NET_ADMIN \
     @IMAGE@'
 # A stop normally takes ~4s, but s6-overlay won't act on SIGTERM until startup is done, and
-# startup can block for up to otbr-agent-net's timeout-up (150s) while waiting to attach to
+# startup can block for up to otbr-agent-net's timeout-up (180s) while waiting to attach to
 # the mesh. Docker's default 10s would SIGKILL the container mid-startup (exit 137, unit
-# marked failed), so give it 180s; TimeoutStopSec has to outlast that or systemd kills
+# marked failed), so give it 210s; TimeoutStopSec has to outlast that or systemd kills
 # ExecStop first.
-ExecStop=/usr/bin/docker stop -t 180 matter2mqtt
-TimeoutStopSec=200
+ExecStop=/usr/bin/docker stop -t 210 matter2mqtt
+TimeoutStopSec=230
 Restart=always
 RestartSec=5
 # Container output arrives as "<prio>service: message" from the s6 loggers that have

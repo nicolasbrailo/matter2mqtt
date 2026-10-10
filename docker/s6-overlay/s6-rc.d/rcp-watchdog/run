@@ -31,6 +31,7 @@ ATTACH_TRIES=6                     # after a reset: ot-net-up.sh polls this many
 ATTACH_WAIT=5                      # ...this far apart, waiting for the mesh
 BACKOFF_AFTER=3                    # failed recoveries before slowing down
 BACKOFF=300                        # ...then wait this long between attempts
+NO_NET_EVERY=30                    # repeat the "no Thread network" notice this often
 
 # Matched loosely (not the exact file:line) so an otbr-agent reword of
 # "Init() at spinel_driver.cpp:NN: Failure" doesn't silently break detection.
@@ -41,6 +42,17 @@ WEDGE_RE='Platform.*Init.*Failure'
 # blocks -> timeout fires. Either way non-zero = unhealthy.
 rcp_answers() {
     timeout 5 ot-ctl state >/dev/null 2>&1
+}
+
+# otbr-agent-net only says once, at boot, that no Thread network exists, and that's easy
+# to miss in the rest of the boot output. Keep repeating it until one is created.
+nag_no_network() {
+    [ $((SECONDS - last_nag)) -ge "$NO_NET_EVERY" ] || return 0
+    last_nag=$SECONDS
+    if timeout 5 ot-ctl dataset active 2>&1 | grep -q 'NotFound'; then
+        echo "[rcp-watchdog] NO THREAD NETWORK: no Thread network exists, Thread devices won't work."
+        echo "[rcp-watchdog] NO THREAD NETWORK: to create one, run 'make -C docker new-network' on the host."
+    fi
 }
 
 # Reset the C6 and put the Thread stack back together. 0 if the RCP answers after.
@@ -75,10 +87,12 @@ recover() {
 sleep "$GRACE"
 fails=0       # consecutive unhealthy polls
 recoveries=0  # consecutive failed recovery attempts
+last_nag=-$NO_NET_EVERY  # so the first healthy poll checks right away
 while :; do
     if rcp_answers; then
         fails=0
         recoveries=0
+        nag_no_network
         if [ -e "$MARKER" ]; then
             echo "[rcp-watchdog] RCP responding again; clearing $MARKER"
             rm -f "$MARKER"
