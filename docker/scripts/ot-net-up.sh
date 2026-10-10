@@ -14,7 +14,7 @@
 #   INTERVAL      seconds between polls (default 10)
 #   SOCKET_TRIES  seconds to wait for otbr-agent's control socket (default 30)
 #
-# Checks ot-ctl's output rather than its exit status: "Done" means the command
+# Checks ot-cli's output rather than its exit status: "Done" means the command
 # worked, "Error N: ..." that it didn't.
 set -uo pipefail
 
@@ -24,11 +24,11 @@ SOCKET_TRIES=${SOCKET_TRIES:-30}
 
 # otbr-agent is a longrun with no readiness notification, so s6 starts us as soon as
 # it has been exec'd -- typically before it has created its control socket, and every
-# ot-ctl call fails with "connect session failed". Wait until it answers, probing with
+# ot-cli call fails with "connect session failed". Wait until it answers, probing with
 # 'dataset active' since we need its answer anyway: "Done" (there's a dataset) or
 # "Error 23: NotFound" (there isn't) both mean the agent is up; anything else doesn't.
 for i in $(seq 1 "$SOCKET_TRIES"); do
-    dataset=$(timeout 5 ot-ctl dataset active 2>&1)
+    dataset=$(ot-cli dataset active 2>&1)
     if grep -qE '^Done|NotFound' <<<"$dataset"; then
         break
     fi
@@ -50,14 +50,14 @@ if grep -q 'NotFound' <<<"$dataset"; then
     exit 0
 fi
 
-# Run an ot-ctl command and log it if it doesn't say Done. Not fatal: 'thread start'
+# Run an ot-cli command and log it if it doesn't say Done. Not fatal: 'thread start'
 # can error harmlessly if the network is already up (e.g. on the rcp-watchdog path), and
 # the attach poll below is what decides success either way.
 ot() {
     local out
-    out=$(timeout 5 ot-ctl "$@" 2>&1)
+    out=$(ot-cli "$@" 2>&1)
     if ! grep -q '^Done' <<<"$out"; then
-        echo "[ot-net-up] warning: 'ot-ctl $*' said: $(tr '\n' ' ' <<<"$out")" >&2
+        echo "[ot-net-up] warning: 'ot-cli $*' said: $(tr '\n' ' ' <<<"$out")" >&2
     fi
 }
 
@@ -66,7 +66,7 @@ ot ifconfig up
 ot thread start
 
 for _ in $(seq 1 "$ATTEMPTS"); do
-    if timeout 5 ot-ctl state | grep -E '^(leader|router|child)' >/dev/null; then
+    if ot-cli state | grep -E '^(leader|router|child)' >/dev/null; then
         echo "[ot-net-up] attached to mesh; network ready."
         exit 0
     fi

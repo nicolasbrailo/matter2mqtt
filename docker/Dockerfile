@@ -179,7 +179,7 @@ COPY --from=mqtt_bridge . /matter2mqtt-src/mqtt_bridge
 # Helper scripts (e.g. bt-host-check.sh) onto PATH via /matter2mqtt-bin. Copied late
 # so editing them doesn't bust the heavy build layers.
 COPY scripts/ /matter2mqtt-bin/
-RUN chmod +x /matter2mqtt-bin/*.sh /matter2mqtt-bin/*.py
+RUN chmod +x /matter2mqtt-bin/*.sh /matter2mqtt-bin/*.py /matter2mqtt-bin/ot-cli
 
 
 # -- Cleanup

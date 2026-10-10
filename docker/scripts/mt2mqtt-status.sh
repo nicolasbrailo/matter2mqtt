@@ -7,5 +7,5 @@ for s in /run/service/*; do
 done
 
 echo "Thread network status:"
-ot-ctl state
+ot-cli state
 

@@ -2,7 +2,7 @@
 # Detect a wedged Spinel RCP from inside the container and recover it in place.
 #
 # Detection does NOT touch /dev/ttyACM0 while otbr-agent is up (that would fight
-# it for the exclusive port) -- it pings the daemon's control socket via ot-ctl
+# it for the exclusive port) -- it pings the daemon's control socket via ot-cli
 # and reads otbr-agent's log for the Spinel-init failure signature. See NOTES
 # Step 7.
 #
@@ -38,10 +38,10 @@ NO_NET_EVERY=30                    # repeat the "no Thread network" notice this 
 WEDGE_RE='Platform.*Init.*Failure'
 
 # Healthy = the daemon answers at all; even "detached" means the RCP is talking.
-# Crash-looping -> no control socket -> ot-ctl fails fast. Hung mid-run -> ot-ctl
-# blocks -> timeout fires. Either way non-zero = unhealthy.
+# Crash-looping -> no control socket -> ot-cli fails fast. Hung mid-run -> ot-cli
+# blocks -> its timeout fires. Either way non-zero = unhealthy.
 rcp_answers() {
-    timeout 5 ot-ctl state >/dev/null 2>&1
+    ot-cli state >/dev/null 2>&1
 }
 
 # otbr-agent-net only says once, at boot, that no Thread network exists, and that's easy
@@ -49,7 +49,7 @@ rcp_answers() {
 nag_no_network() {
     [ $((SECONDS - last_nag)) -ge "$NO_NET_EVERY" ] || return 0
     last_nag=$SECONDS
-    if timeout 5 ot-ctl dataset active 2>&1 | grep -q 'NotFound'; then
+    if ot-cli dataset active 2>&1 | grep -q 'NotFound'; then
         echo "[rcp-watchdog] NO THREAD NETWORK: no Thread network exists, Thread devices won't work."
         echo "[rcp-watchdog] NO THREAD NETWORK: to create one, run 'make -C docker new-network' on the host."
     fi
@@ -77,7 +77,7 @@ recover() {
     ATTEMPTS=$ATTACH_TRIES INTERVAL=$ATTACH_WAIT ot-net-up.sh
 
     if rcp_answers; then
-        echo "[rcp-watchdog] recovered; state=$(timeout 5 ot-ctl state | head -1)"
+        echo "[rcp-watchdog] recovered; state=$(ot-cli state | head -1)"
         return 0
     fi
     echo "[rcp-watchdog] still wedged after reset"

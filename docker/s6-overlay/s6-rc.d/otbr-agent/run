@@ -7,6 +7,16 @@
 # stdout so otbr-agent-log captures it.
 set -euo pipefail
 
+# Log level, as a syslog level: 5 (notice) keeps warnings and notable events, 7 (debug) adds
+# OpenThread's [I] and [D] lines, which come several times a second (every ot-ctl call
+# alone logs its input and output). DEBUG=1 for debug. To flip it in a running container,
+# edit /run/service/otbr-agent/run.user and `/command/s6-svc -r /run/service/otbr-agent`
+# (restarts otbr-agent, so Thread drops briefly). Or, without a restart and for OpenThread's
+# own lines only: `ot-ctl log level 5` (debug; OpenThread counts 5=debug, 4=info, 3=note);
+# `ot-ctl log level 3` to go back.
+DEBUG=0
+if [ "$DEBUG" = 1 ]; then level=7; else level=5; fi
+
 exec 2>&1                         # fold stderr into stdout so otbr-agent-log captures it
-exec /matter2mqtt-bin/otbr-agent -I wpan0 -B ot-infra -v -d 7 \
+exec /matter2mqtt-bin/otbr-agent -I wpan0 -B ot-infra -v -d "$level" \
     'spinel+hdlc+uart:///dev/ttyACM0?uart-baudrate=460800'

@@ -30,3 +30,14 @@ Contents
 The system is now ready to start pairing devices.
 
 
+## Migrating a network
+
+The container keeps state about the Matter network and the otbr service. You can transfer your network config to another server by copying these files. In the run directory (eg /run/matter2mqtt), copy the matter-server-data directory and the otbr/*.data file.
+
+Note that the name of the .data file is tied to the physical radio adapter. If you use a different radio adapter, you need to rename the file. (TODO: How do you find out the name of the new file?)
+
+## "Normal" errors
+
+* `[matter_server.server.vendor_info] Unable to fetch vendor info from DCL: Cannot connect to host on.dcl.csa-iot.org:443 ssl:default [Temporary failure in name resolution]` - This means the container couldn't fetch new certs. This is normal (the container has no network or internet access) but it does mean the certificates are never updated after being baked in by the build process. If a certificate is invalidated upstream, the container will continue to accept it. Likewise, if a device in your network is using a new cert, you won't be able to provission it. There is no mechanism to update certs in the image (yet, //TODO).
+
+

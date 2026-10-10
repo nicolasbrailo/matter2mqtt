@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""Run one OpenThread CLI command on otbr-agent, like `ot-ctl <command>`, but end the
+session cleanly.
+
+ot-ctl closes the socket as soon as it reads "Done", while otbr-agent still has the "> "
+prompt to send after it. Depending on timing the agent then logs "Daemon read: Connection
+reset by peer" or "Failed to write CLI output: Broken pipe" at warning level, for most
+calls. Scripts that poll the agent (rcp-watchdog every 10s) filled the log with those.
+This reads up to Done/Error, then shuts down its write side and reads until the agent
+closes its end, which the agent handles silently.
+
+Same output as ot-ctl: the command's lines through Done or "Error N: ...", prompts
+stripped, and exit 0 whether the command succeeded or not (check for Done). Exits 1 if the
+agent can't be reached, 124 on timeout (like timeout(1)).
+
+Usage: ot-cli [-t SECONDS] <command> [args...]    e.g. ot-cli dataset active
+"""
+import socket
+import sys
+
+SOCKET = "/run/openthread-wpan0.sock"
+
+
+def escape(arg):
+    # As ot-ctl does: the CLI splits on whitespace and unescapes backslashes.
+    return "".join("\\" + c if c in " \t\r\n\\" else c for c in arg)
+
+
+def finished(lines):
+    return any(l.startswith(("Done", "Error ")) for l in lines)
+
+
+def main(argv):
+    timeout = 5.0
+    if argv[:1] == ["-t"]:
+        timeout, argv = float(argv[1]), argv[2:]
+    if not argv:
+        sys.exit(__doc__.strip().splitlines()[-1])
+
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    try:
+        s.connect(SOCKET)
+    except OSError as e:
+        print(f"connect session failed: {e.strerror}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        s.sendall((" ".join(escape(a) for a in argv) + "\n").encode())
+        buf = b""
+        lines = []
+        while not finished(lines):
+            data = s.recv(4096)
+            if not data:
+                break  # agent closed the session early (e.g. it's shutting down)
+            buf += data
+            lines = [l[2:] if l.startswith("> ") else l
+                     for l in buf.decode(errors="replace").splitlines(keepends=True)]
+        # Print up to and including Done/Error; anything after it is the next prompt.
+        for line in lines:
+            sys.stdout.write(line)
+            if line.startswith(("Done", "Error ")):
+                break
+        sys.stdout.flush()
+
+        s.shutdown(socket.SHUT_WR)
+        while s.recv(4096):
+            pass
+    except socket.timeout:
+        print(f"ot-cli: no answer from otbr-agent within {timeout:g}s", file=sys.stderr)
+        sys.exit(124)
+    except OSError as e:
+        print(f"ot-cli: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        s.close()
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
