@@ -13,7 +13,8 @@ rebuild:
 # starting it on a dev box would kill a `make -C docker start` container. Start with
 #   sudo systemctl start matter2mqtt.service
 # (pulls in both proxies). SYSTEMD_RUNDIR is the host state dir (Thread network, logs, MQTT
-# socket); it's mounted at /matter2mqtt-run in the container. Re-run after editing a template.
+# socket, mqtt-bridge.json); it's mounted at /matter2mqtt-run in the container. Re-run after
+# editing a template.
 # Needs xdg-dbus-proxy on the host.
 SYSTEMD_RUNDIR ?= $(HOME)/run/matter2mqtt
 IMAGE          ?= matter2mqtt:dev
@@ -24,6 +25,9 @@ SYSTEMD_UNITS  := matter2mqtt-mqtt-proxy.socket matter2mqtt-mqtt-proxy.service \
 
 install_systemd:
 	mkdir -p '$(SYSTEMD_RUNDIR)/logs'
+	# Bridge config, seeded with the defaults; never overwrites one that's been edited
+	test -f '$(SYSTEMD_RUNDIR)/mqtt-bridge.json' || \
+		cp '$(CURDIR)/mqtt_bridge/mqtt-bridge.json' '$(SYSTEMD_RUNDIR)/mqtt-bridge.json'
 	for u in $(SYSTEMD_UNITS); do \
 		sed -e 's|@RUNDIR@|$(SYSTEMD_RUNDIR)|g' \
 		    -e 's|@BROKER@|$(BROKER)|g' \

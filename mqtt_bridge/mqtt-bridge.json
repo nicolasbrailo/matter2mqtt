@@ -1,0 +1,5 @@
+{
+    "mqtt_topic": "matter2mqtt",
+    "mqtt_socket": "/matter2mqtt-run/mqtt.sock",
+    "matter_server_url": "ws://127.0.0.1:5580/ws"
+}

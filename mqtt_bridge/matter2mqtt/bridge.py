@@ -23,11 +23,13 @@
   mt2m/<device>/availability                     <- {"state":"online"|"offline"} (retained)
   mt2m/bridge/state                              <- the bridge itself, offline via the mqtt will
 
-<device> is a friendly_name, unique_id or node_id (tried in that order). Errors go to
-mt2m as {"error": {...}}.
+mt2m is the default base topic; mqtt_topic in the config file changes it. <device> is a
+friendly_name, unique_id or node_id (tried in that order). Errors go to mt2m as
+{"error": {...}}.
 
-Run it with `python3 main.py` (or `python3 -m matter2mqtt`). This module is the wiring: it
+Run it with `python3 main.py <config.json>` (or `python3 -m matter2mqtt <config.json>`). This module is the wiring: it
 owns the pieces and decides what gets published where.
+  config.py               the json config: base topic, broker socket, matter-server url
   matter/connection.py    the matter-server connection, on its own loop in a background thread
   matter/data_model.py    what Matter calls things: ids, names, raw values
   matter/registry.py      the device table, kept current from that connection
@@ -40,14 +42,17 @@ owns the pieces and decides what gets published where.
 Threads: paho runs the connection on the main thread; all Matter work (and the device table)
 lives on the matter loop, so a route is parsed on the paho thread and handed over.
 """
+import sys
+
+from . import config
 from .errors import RequestError, describe
 from .matter.connection import Matter
 from .matter.data_model import dump_node
 from .matter.provisioning import Provisioner
 from .matter.registry import DeviceRegistry
-from .z2m import control, mqtt_link
+from .z2m import control
 from .z2m.devices import Device
-from .z2m.mqtt_link import MqttLink, TOPIC
+from .z2m.mqtt_link import MqttLink
 
 
 def log(msg):
@@ -57,9 +62,9 @@ def log(msg):
 class Bridge:
     """Runs on the matter loop, except for the constructor and the routes handed to it."""
 
-    def __init__(self, link):
+    def __init__(self, link, matter_url):
         self.link = link
-        self.matter = Matter(on_connect=self.on_matter_connect,
+        self.matter = Matter(matter_url, on_connect=self.on_matter_connect,
                              on_disconnect=self.on_matter_disconnect)
         self.registry = DeviceRegistry(self.matter, Device, on_devices=self.publish_devices,
                                        on_state=self.publish_state, on_action=self.publish_action,
@@ -77,39 +82,39 @@ class Bridge:
 
     def error(self, request, msg):
         log(f"{request}: {msg}")
-        self.link.publish(TOPIC, {"error": {"request": request, "msg": msg}})
+        self.link.publish(self.link.topic, {"error": {"request": request, "msg": msg}})
 
     def event(self, type_, **data):
         """z2m-style bridge/event: progress a client can follow without reading the logs."""
-        self.link.publish(mqtt_link.EVENT_TOPIC, {"type": type_, "data": data})
+        self.link.publish(self.link.event_topic, {"type": type_, "data": data})
 
     def publish_devices(self, devices):
-        self.link.publish(mqtt_link.DEVICES_TOPIC, [d.info for d in devices], retain=True)
+        self.link.publish(self.link.devices_topic, [d.info for d in devices], retain=True)
         for dev in devices:
             self.publish_availability(dev)
             self.publish_state(dev)
 
     def publish_state(self, dev):
-        self.link.publish(mqtt_link.device_topic(dev.friendly_name), dev.state())
+        self.link.publish(self.link.device_topic(dev.friendly_name), dev.state())
 
     def publish_availability(self, dev, online=None):
         """z2m-style availability. A node is `available` while matter-server can reach it."""
         if online is None:
             online = dev.node.available
-        self.link.publish(mqtt_link.availability_topic(dev.friendly_name),
+        self.link.publish(self.link.availability_topic(dev.friendly_name),
                           {"state": "online" if online else "offline"}, retain=True)
 
     def forget_name(self, old_name, dev):
         """A device is published under a new name: drop the retained messages under the old one,
         or the broker keeps serving them to every new subscriber."""
         log(f"renamed {old_name!r} -> {dev.friendly_name!r}")
-        self.link.clear_retained(mqtt_link.device_topic(old_name))
-        self.link.clear_retained(mqtt_link.availability_topic(old_name))
+        self.link.clear_retained(self.link.device_topic(old_name))
+        self.link.clear_retained(self.link.availability_topic(old_name))
 
     def publish_action(self, dev, prop, action):
         log(f"{dev.friendly_name}: {prop}={action}")
         # Its own message, not retained: a retained press would replay to every new subscriber
-        self.link.publish(mqtt_link.device_topic(dev.friendly_name), {prop: action})
+        self.link.publish(self.link.device_topic(dev.friendly_name), {prop: action})
 
     def respond(self, subject, transaction, data=None, error=None):
         msg = {"status": "error" if error else "ok"}
@@ -119,7 +124,7 @@ class Bridge:
             msg["data"] = {} if data is None else data
         if transaction is not None:
             msg["transaction"] = transaction
-        self.link.publish(mqtt_link.response_topic(subject), msg)
+        self.link.publish(self.link.response_topic(subject), msg)
 
     # --- matter events --------------------------------------------------------
 
@@ -142,7 +147,7 @@ class Bridge:
         self.matter.submit(self.routes[name](*args, payload))
 
     async def ping(self, payload):
-        self.link.publish(TOPIC, {"pong": {}})
+        self.link.publish(self.link.topic, {"pong": {}})
 
     async def discover(self, payload):
         """Rebuild the device table and republish it, even if nothing changed."""
@@ -163,7 +168,7 @@ class Bridge:
         self.registry.rebuild()
         dev = self.registry.devices.get(node_data.node_id)
         name = dev.friendly_name if dev else f"matter_{node_data.node_id}"
-        self.on_provision_progress("done", f"{name} is commissioned; set it with mt2m/{name}/set",
+        self.on_provision_progress("done", f"{name} is commissioned; set it with {self.link.device_topic(name)}/set",
                                    node_id=node_data.node_id, friendly_name=name)
 
     async def device_request(self, name, op, payload):
@@ -234,16 +239,21 @@ REQUESTS = {
 
 
 def main():
+    if len(sys.argv) != 2:
+        sys.exit(f"usage: {sys.argv[0]} <config.json>")
+    cfg = config.load(sys.argv[1])
+    log(f"config from {sys.argv[1]}: {cfg}")
     bridge = None
 
     def on_ready(link):
         nonlocal bridge
-        bridge = Bridge(link)
+        bridge = Bridge(link, cfg["matter_server_url"])
 
     def on_route(route, payload):
         bridge.dispatch(route, payload)
 
-    MqttLink(on_ready=on_ready, on_route=on_route).run_forever()
+    MqttLink(cfg["mqtt_topic"], cfg["mqtt_socket"],
+             on_ready=on_ready, on_route=on_route).run_forever()
 
 
 if __name__ == "__main__":

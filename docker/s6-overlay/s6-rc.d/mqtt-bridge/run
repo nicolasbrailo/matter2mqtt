@@ -6,11 +6,15 @@
 # Runs the copy baked into the image, unless a dev copy has been deployed into the run dir
 # (`make redeploy-bridge`): that one wins, so iterating on the bridge doesn't need an image
 # rebuild. `make undeploy-bridge` removes it to go back to the image's copy.
+#
+# Config (mqtt topic, broker socket, matter-server url) is read from $CONFIG in the run dir,
+# so it can be edited on the host. On first run it's seeded from the bridge's default.
 set -euo pipefail
 exec 2>&1                         # fold stderr into stdout so mqtt-bridge-log captures it
 
 BAKED=/matter2mqtt-src/mqtt_bridge
 DEV=/matter2mqtt-run/bridge2
+CONFIG=/matter2mqtt-run/mqtt-bridge.json
 
 if [ -f "$DEV/main.py" ]; then
     echo "[mqtt-bridge] running DEV copy from $DEV, not the image's"
@@ -19,7 +23,12 @@ else
     dir=$BAKED
 fi
 
+if [ ! -f "$CONFIG" ]; then
+    echo "[mqtt-bridge] no $CONFIG, creating it with the defaults"
+    cp "$dir/mqtt-bridge.json" "$CONFIG"
+fi
+
 # main.py delegates to the matter2mqtt package next to it, so run from its directory (that's
 # what puts the package on sys.path). -u: unbuffered, so log lines reach s6-log as they happen.
 cd "$dir"
-exec python3 -u main.py
+exec python3 -u main.py "$CONFIG"

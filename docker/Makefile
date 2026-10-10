@@ -128,7 +128,8 @@ sync-bridge: need-container
 	docker exec $(CONTAINER) rm -rf $(BRIDGE_DIR)
 	mkdir -p '$(RUNDIR)/bridge2'
 	cp -r $(CURDIR)/../mqtt_bridge/matter2mqtt $(CURDIR)/../mqtt_bridge/tests \
-	      $(CURDIR)/../mqtt_bridge/main.py '$(RUNDIR)/bridge2/'
+	      $(CURDIR)/../mqtt_bridge/main.py $(CURDIR)/../mqtt_bridge/mqtt-bridge.json \
+	      '$(RUNDIR)/bridge2/'
 
 # Stop the service, swap in the working tree's bridge, start it again.
 redeploy-bridge: need-container

@@ -12,7 +12,6 @@ from pathlib import Path
 import aiohttp
 from matter_server.client import MatterClient
 
-MATTER_URL = "ws://127.0.0.1:5580/ws"
 RECONNECT_DELAY = 5
 OT_CTL_DATASET = ("ot-ctl", "dataset", "active", "-x")
 # Must match --paa-root-cert-dir in s6-overlay/s6-rc.d/matter-server/run
@@ -24,9 +23,10 @@ def log(msg):
 
 
 class Matter:
-    def __init__(self, on_connect, on_disconnect):
-        """on_connect(client) runs on the matter loop after every (re)connect, once the node cache
-        is populated; on_disconnect() when that connection drops (nothing is known any more)."""
+    def __init__(self, url, on_connect, on_disconnect):
+        """url is matter-server's websocket. on_connect(client) runs on the matter loop after
+        every (re)connect, once the node cache is populated; on_disconnect() when that connection drops (nothing is known any more)."""
+        self.url = url
         self.client = None
         self.loop = asyncio.new_event_loop()
         self._on_connect = on_connect
@@ -37,7 +37,7 @@ class Matter:
         while True:
             try:
                 async with aiohttp.ClientSession() as session:
-                    client = MatterClient(MATTER_URL, session)
+                    client = MatterClient(self.url, session)
                     await client.connect()
                     init = asyncio.Event()
                     listen = asyncio.create_task(client.start_listening(init))
@@ -62,7 +62,7 @@ class Matter:
                     await listen  # returns (or raises) when the connection drops
                     log("disconnected")
             except Exception as e:
-                log(f"connection to {MATTER_URL} failed: {e!r}")
+                log(f"connection to {self.url} failed: {e!r}")
             self.client = None
             try:
                 self._on_disconnect()
