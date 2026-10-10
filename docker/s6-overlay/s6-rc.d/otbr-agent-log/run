@@ -7,7 +7,40 @@
 #   s10000000 rotate at ~10 MB
 set -euo pipefail
 
+# TEE_TO_CONTAINER=1 also copies each line to the container's stdout, rewritten by to_container() as
+# "<prio>otbr-agent: message". The log file always gets the line unchanged. A leading <N> is a
+# syslog priority: journald honours it when it captures the container's output, so under
+# matter2mqtt.service `journalctl -u matter2mqtt -p warning` works. To flip this in a
+# running container, edit /run/service/otbr-agent-log/run.user, then
+# `/command/s6-svc -r /run/service/otbr-agent-log`: that restarts only this logger, and s6
+# holds the pipe from otbr-agent, so no lines are lost.
+TEE_TO_CONTAINER=1
+
 LOGDIR=/matter2mqtt-run/logs/otbr-agent
 mkdir -p "$LOGDIR"                     # make the dir ourselves so the symlink has a home
 ln -sf current "$LOGDIR/otbr-agent.log"  # stable .log handle to the live log; survives rotation
+
+to_container() {
+    exec mawk -W interactive '
+        # "otbr-agent[pid]: [NOTE]-AGENT---: ..." (otbr) or
+        # "otbr-agent[pid]: 00:00:00.019 [I] BorderAgent---: ..." (OpenThread core): the
+        # first bracketed level gives the priority. These lines already carry name and pid;
+        # anything else gets an "otbr-agent: " prefix.
+        {
+            p = 6
+            if (match($0, /\[(CRIT|WARN|NOTE|INFO|DEBG|C|W|N|I|D)\]/)) {
+                l = substr($0, RSTART + 1, 1)
+                p = (l == "C") ? 2 : (l == "W") ? 4 : (l == "N") ? 5 : (l == "D") ? 7 : 6
+            }
+            if ($0 !~ /^otbr-agent\[[0-9]+\]: /) $0 = "otbr-agent: " $0
+            print "<" p ">" $0
+            fflush()
+        }
+    '
+}
+
+if [ "$TEE_TO_CONTAINER" = 1 ]; then
+    # The trailing "1" makes s6-log forward every line to its stdout: to_container.
+    exec s6-log -b n5 s10000000 "$LOGDIR" 1 > >(to_container)
+fi
 exec s6-log -b n5 s10000000 "$LOGDIR"

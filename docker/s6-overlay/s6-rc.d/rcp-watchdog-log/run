@@ -8,7 +8,39 @@
 #   s10000000 rotate at ~10 MB
 set -euo pipefail
 
+# TEE_TO_CONTAINER=1 also copies each line to the container's stdout, rewritten by to_container() as
+# "<prio>rcp-watchdog: message". The log file always gets the line unchanged. A leading <N> is a
+# syslog priority: journald honours it when it captures the container's output, so under
+# matter2mqtt.service `journalctl -u matter2mqtt -p warning` works. To flip this in a
+# running container, edit /run/service/rcp-watchdog-log/run.user, then
+# `/command/s6-svc -r /run/service/rcp-watchdog-log`: that restarts only this logger, and s6
+# holds the pipe from rcp-watchdog, so no lines are lost.
+TEE_TO_CONTAINER=1
+
 LOGDIR=/matter2mqtt-run/logs/rcp-watchdog
 mkdir -p "$LOGDIR"                       # make the dir ourselves so the symlink has a home
 ln -sf current "$LOGDIR/rcp-watchdog.log"  # stable .log handle to the live log; survives rotation
+
+to_container() {
+    exec mawk -W interactive '
+        # The watchdog tags its own lines "[rcp-watchdog] ..."; priorities follow what each
+        # message means. Output from ot-net-up.sh / esp_reset.py during a recovery is info,
+        # except the ot-net-up timeout.
+        {
+            p = 6
+            if      ($0 ~ /resets failed/)                     p = 2
+            else if ($0 ~ /RCP WEDGED|still wedged/)           p = 3
+            else if ($0 ~ /not answering|unhealthy|reported failure|backing off|timed out/) p = 4
+            else if ($0 ~ /recovery attempt|recovered|responding again/) p = 5
+            sub(/^\[rcp-watchdog\] /, "")
+            print "<" p ">rcp-watchdog: " $0
+            fflush()
+        }
+    '
+}
+
+if [ "$TEE_TO_CONTAINER" = 1 ]; then
+    # The trailing "1" makes s6-log forward every line to its stdout: to_container.
+    exec s6-log -b n5 s10000000 "$LOGDIR" 1 > >(to_container)
+fi
 exec s6-log -b n5 s10000000 "$LOGDIR"

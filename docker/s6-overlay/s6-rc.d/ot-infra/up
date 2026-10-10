@@ -1,7 +1,15 @@
 bash -c "
   set -euo pipefail
+  # TEE_TO_CONTAINER=1 also copies the log to the container's stdout as
+  # '<prio>ot-infra: message' (see the *-log/run loggers). A oneshot runs once at
+  # boot, so unlike the loggers this only changes with an image rebuild.
+  TEE_TO_CONTAINER=1
   mkdir -p /matter2mqtt-run/logs
-  exec >> /matter2mqtt-run/logs/ot-infra.log 2>&1
+  if [ $TEE_TO_CONTAINER = 1 ]; then
+    exec > >(tee -a /matter2mqtt-run/logs/ot-infra.log | sed -u -e 's/^[[]ot-infra[]] //' -e '/^RTNETLINK/s/^/<3>/' -e '/^<[0-9]>/!s/^/<6>/' -e 's/^<[0-9]>/&ot-infra: /') 2>&1
+  else
+    exec >> /matter2mqtt-run/logs/ot-infra.log 2>&1
+  fi
   # Under --network none the container has only loopback, and it may come up
   # DOWN. matter-server binds 127.0.0.1:5580 (and matter-ws-check.py dials it),
   # so ensure lo is up before anything needs it. Idempotent if already up.
