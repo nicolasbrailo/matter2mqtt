@@ -1,4 +1,4 @@
-.PHONY: rebuild install_systemd
+.PHONY: rebuild install_systemd system_deps
 
 # Production entry point: build the image and install it as systemd services. Everything
 # for development (running the container by hand, the foreground proxies, syncing the
@@ -38,3 +38,6 @@ install_systemd:
 	sudo systemctl daemon-reload
 	# mqtt-proxy.service has no [Install]: its socket activates it.
 	sudo systemctl enable $(filter-out matter2mqtt-mqtt-proxy.service,$(SYSTEMD_UNITS))
+
+system_deps:
+	sudo apt install xdg-dbus-proxy

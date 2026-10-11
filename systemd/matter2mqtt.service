@@ -10,10 +10,13 @@ After=docker.service matter2mqtt-mqtt-proxy.socket matter2mqtt-bluez-proxy.servi
 Wants=matter2mqtt-mqtt-proxy.socket matter2mqtt-bluez-proxy.service
 
 [Service]
-ExecStartPre=-/usr/bin/docker rm -f matter2mqtt
+# Clear out a leftover container. There normally isn't one, so silence docker's "No such
+# container" error: it reads like the cause of whatever fails next.
+ExecStartPre=-/bin/sh -c '/usr/bin/docker rm -f matter2mqtt >/dev/null 2>&1'
+# <3> makes journald log the line at err priority (see SyslogIdentifier below)
 ExecStart=/bin/sh -c '\
   rcp=$$(readlink -e /dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit_*) \
-    || { echo "RCP dongle not found under /dev/serial/by-id" >&2; exit 1; }; \
+    || { echo "<3>RCP dongle not found under /dev/serial/by-id, is it plugged in?" >&2; exit 1; }; \
   exec /usr/bin/docker run --rm --name matter2mqtt \
     --network none \
     -v @RUNDIR@:/matter2mqtt-run \
