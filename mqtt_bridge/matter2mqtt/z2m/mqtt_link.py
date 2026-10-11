@@ -42,6 +42,7 @@ class MqttLink:
         self.devices_topic = f"{topic}/bridge/devices"
         self.bridge_state_topic = f"{topic}/bridge/state"
         self.event_topic = f"{topic}/bridge/event"
+        self.pong_topic = f"{topic}/pong"
         self.on_ready = on_ready
         self.on_route = on_route
         self.ready = False

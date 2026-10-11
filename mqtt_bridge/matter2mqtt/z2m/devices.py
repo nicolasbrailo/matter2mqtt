@@ -27,7 +27,7 @@ from ..matter.data_model import (
 from .caps import ActionCap, BATTERY, endpoint_caps, sensor_caps
 
 # A device's state goes to mt2m/<friendly_name>, so it can't be named like a bridge topic
-RESERVED_NAMES = {"bridge", "ping", "discover", "provision"}
+RESERVED_NAMES = {"bridge", "ping", "pong", "discover", "provision"}
 
 
 def friendly_name(label, node_id):

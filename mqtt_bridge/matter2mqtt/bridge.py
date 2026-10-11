@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Matter -> MQTT bridge, zigbee2mqtt style.
 
-  mt2m/ping                 {}                   -> mt2m {"pong":{}}
+  mt2m/ping                 {}                   -> mt2m/pong {}
   mt2m/provision            {"code":"12345678901"} or {"code":"MT:..."} -- commission a new
                             device over BLE+Thread; progress on mt2m/bridge/event
   mt2m/discover             {}                   -> mt2m/bridge/devices (retained) + every device's state
@@ -181,7 +181,7 @@ class Bridge:
         self.matter.submit(self.routes[name](*args, payload))
 
     async def ping(self, payload):
-        self.link.publish(self.link.topic, {"pong": {}})
+        self.link.publish(self.link.pong_topic, {})
 
     async def discover(self, payload):
         """Rebuild the device table and republish it, even if nothing changed."""
