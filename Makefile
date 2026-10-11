@@ -18,7 +18,7 @@ rebuild:
 # Needs xdg-dbus-proxy on the host.
 SYSTEMD_RUNDIR ?= $(HOME)/run/matter2mqtt
 IMAGE          ?= matter2mqtt:dev
-BROKER         ?= 10.0.0.10
+BROKER         ?= 127.0.0.1
 BROKER_PORT    ?= 1883
 SYSTEMD_UNITS  := matter2mqtt-mqtt-proxy.socket matter2mqtt-mqtt-proxy.service \
                   matter2mqtt-bluez-proxy.service matter2mqtt.service
