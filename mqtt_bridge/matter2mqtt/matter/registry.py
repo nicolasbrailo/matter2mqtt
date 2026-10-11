@@ -30,6 +30,7 @@ class DeviceRegistry:
         self.devices = {}       # node_id -> Device
         self._attr_unsubs = {}  # node_id -> unsubscribe fns for its attribute updates
         self._pending_state = set()
+        self._warned_no_id = set()  # node_ids already warned about, so a rebuild doesn't repeat it
 
     def attach(self, client):
         """Subscribe to a (re)connected matter client and build the table."""
@@ -44,7 +45,14 @@ class DeviceRegistry:
         """Rebuild the table from matter-server's cache and hand it to the bridge."""
         client = self.matter.client
         was_named = {nid: d.friendly_name for nid, d in self.devices.items()}
-        self.devices = {n.node_id: self.device_cls(n) for n in client.get_nodes()}
+        fabric = client.server_info.compressed_fabric_id if client.server_info else None
+        self.devices = {n.node_id: self.device_cls(n, fabric) for n in client.get_nodes()}
+        for dev in self.devices.values():
+            if not dev.has_unique_id and dev.node_id not in self._warned_no_id:
+                self._warned_no_id.add(dev.node_id)
+                log(f"WARNING: {dev.friendly_name} (node {dev.node_id}) has no UniqueID, which "
+                    f"clients need to identify it; using its Matter operational id "
+                    f"{dev.unique_id!r} instead")
         # Attribute-update callbacks don't say which node changed, so subscribe per node
         for node_id in list(self._attr_unsubs):
             if node_id not in self.devices:

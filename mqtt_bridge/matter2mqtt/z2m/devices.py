@@ -8,7 +8,8 @@ Published entry, one per commissioned node:
   "node_id": 1, "friendly_name": "...", "available": true,
   "network": "thread",               # thread | wifi | ethernet | unknown
   "manufacturer": "...", "vendor_id": 4107, "model": "...", "product_id": 1,
-  "serial_number": "...", "unique_id": "...", "software_version": "...", "hardware_version": "...",
+  "serial_number": "...", "unique_id": "...",  # UniqueID, else the operational id
+  "software_version": "...", "hardware_version": "...",
   "interview_completed": true, "interviewing": false, "last_interview": "...", "interview_version": 6,
   "definition": {"vendor": "...", "model": "...", "description": "Extended Color Light",
                  "supports_ota": true,
@@ -43,8 +44,16 @@ def valid_name(label):
     return label.split("/")[-1] not in ("set", "get")  # mt2m/<name> would look like a request
 
 
+def operational_id(compressed_fabric_id, node_id):
+    """Matter's own name for a node on the network ("<compressed fabric id>-<node id>", the
+    operational instance name it advertises over mDNS): unique beyond this bridge, and stable
+    for as long as the node stays commissioned."""
+    fabric = f"{compressed_fabric_id:016X}-" if compressed_fabric_id is not None else ""
+    return f"{fabric}{node_id:016X}"
+
+
 class Device:
-    def __init__(self, node):
+    def __init__(self, node, compressed_fabric_id=None):
         self.node = node
         self.node_id = node.node_id
         tree = attr_tree(node.node_data.attributes)
@@ -53,7 +62,12 @@ class Device:
 
         # From the live cache, not the interview dump: a rename writes NodeLabel on the device
         self.friendly_name = self.current_name()
+        # UniqueID is what clients identify a device by, but some devices (IKEA's BILRESA
+        # buttons) don't implement it; those get their operational id instead
         self.unique_id = live_value(node, 0, BASIC_INFO, UNIQUE_ID)
+        self.has_unique_id = bool(self.unique_id)
+        if not self.has_unique_id:
+            self.unique_id = operational_id(compressed_fabric_id, self.node_id)
 
         endpoints = {}
         groups = []  # (ep, kind, actuators, sensors)
@@ -111,6 +125,7 @@ class Device:
         for aid, key in BASIC_INFO_FIELDS.items():
             if aid in basic:
                 self.info[key] = basic[aid]
+        self.info["unique_id"] = self.unique_id
         # z2m keeps what a device *is* (and can do) under `definition`, separate from the
         # per-node facts above. vendor/model repeat manufacturer/model, as they do in z2m.
         self.info["definition"] = {
