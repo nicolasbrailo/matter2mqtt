@@ -19,7 +19,7 @@ need-container:
 RUNDIR := $(HOME)/run/matter2mqtt
 
 rebuild:
-	docker build -t matter2mqtt:dev -f ./Dockerfile \
+	docker buildx build --load -t matter2mqtt:dev -f ./Dockerfile \
 		--build-context host_driver=../fw_btmux/host_driver \
 		--build-context mqtt_bridge=../mqtt_bridge \
 		.
