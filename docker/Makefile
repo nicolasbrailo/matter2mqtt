@@ -47,6 +47,7 @@ start:
 		-v '$(RUNDIR)':/matter2mqtt-run \
 		--device $(RCP):/dev/ttyACM0 \
 		--device /dev/net/tun --cap-add NET_ADMIN \
+		--sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv6.conf.default.disable_ipv6=0 \
 		matter2mqtt:dev
 
 # Bare debug shell: same image and device/volume/cap setup as `make start`, but
@@ -67,6 +68,7 @@ start-bare:
 		-v '$(RUNDIR)':/matter2mqtt-run \
 		--device $(RCP):/dev/ttyACM0 \
 		--device /dev/net/tun --cap-add NET_ADMIN \
+		--sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv6.conf.default.disable_ipv6=0 \
 		matter2mqtt:dev
 
 # Filtered D-Bus proxy exposing ONLY org.bluez to the container, so commissioning

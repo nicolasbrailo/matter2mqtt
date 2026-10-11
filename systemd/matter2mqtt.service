@@ -23,6 +23,7 @@ ExecStart=/bin/sh -c '\
     -v /run/matter2mqtt-bluez-proxy:/matter2mqtt-run/bluez \
     --device "$$rcp":/dev/ttyACM0 \
     --device /dev/net/tun --cap-add NET_ADMIN \
+    --sysctl net.ipv6.conf.all.disable_ipv6=0 --sysctl net.ipv6.conf.default.disable_ipv6=0 \
     @IMAGE@'
 # A stop normally takes ~4s, but s6-overlay won't act on SIGTERM until startup is done, and
 # startup can block for up to otbr-agent-net's timeout-up (180s) while waiting to attach to
