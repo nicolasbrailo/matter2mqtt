@@ -9,6 +9,8 @@ DEFAULTS = {
     # Unix socket to the broker; the host relays it to the LAN broker
     "mqtt_socket": "/matter2mqtt-run/mqtt.sock",
     "matter_server_url": "ws://127.0.0.1:5580/ws",
+    # Where the bridge records device names, to restore them on devices that forget theirs
+    "names_file": "/matter2mqtt-run/mqtt-bridge-names.json",
 }
 
 

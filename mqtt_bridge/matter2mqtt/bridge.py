@@ -27,9 +27,13 @@ mt2m is the default base topic; mqtt_topic in the config file changes it. <devic
 friendly_name, unique_id or node_id (tried in that order). Errors go to mt2m as
 {"error": {...}}.
 
-Run it with `python3 main.py <config.json>` (or `python3 -m matter2mqtt <config.json>`). This module is the wiring: it
-owns the pieces and decides what gets published where.
+Device names live on the device (Matter's NodeLabel) and in the names file in the run dir;
+when a device comes back without its name, the bridge renames it again from that file.
+
+Run it with `python3 main.py <config.json>` (or `python3 -m matter2mqtt <config.json>`). This
+module is the wiring: it owns the pieces and decides what gets published where.
   config.py               the json config: base topic, broker socket, matter-server url
+  names.py                the names file: node_id -> the name the device should have
   matter/connection.py    the matter-server connection, on its own loop in a background thread
   matter/data_model.py    what Matter calls things: ids, names, raw values
   matter/registry.py      the device table, kept current from that connection
@@ -50,6 +54,7 @@ from .matter.connection import Matter
 from .matter.data_model import dump_node
 from .matter.provisioning import Provisioner
 from .matter.registry import DeviceRegistry
+from .names import NameStore
 from .z2m import control
 from .z2m.devices import Device
 from .z2m.mqtt_link import MqttLink
@@ -62,8 +67,10 @@ def log(msg):
 class Bridge:
     """Runs on the matter loop, except for the constructor and the routes handed to it."""
 
-    def __init__(self, link, matter_url):
+    def __init__(self, link, matter_url, names):
         self.link = link
+        self.names = names
+        self.restoring = set()  # node_ids with a rename back to their recorded name in flight
         self.matter = Matter(matter_url, on_connect=self.on_matter_connect,
                              on_disconnect=self.on_matter_disconnect)
         self.registry = DeviceRegistry(self.matter, Device, on_devices=self.publish_devices,
@@ -93,6 +100,7 @@ class Bridge:
         for dev in devices:
             self.publish_availability(dev)
             self.publish_state(dev)
+        self.sync_names(devices)
 
     def publish_state(self, dev):
         self.link.publish(self.link.device_topic(dev.friendly_name), dev.state())
@@ -125,6 +133,32 @@ class Bridge:
         if transaction is not None:
             msg["transaction"] = transaction
         self.link.publish(self.link.response_topic(subject), msg)
+
+    # --- names ----------------------------------------------------------------
+
+    def sync_names(self, devices):
+        """Record every name a device reports, and rename a device that lost its name back to
+        the recorded one. Runs after every rebuild, so a rename that failed is retried the next
+        time the device changes (it coming back online is one)."""
+        for dev in devices:
+            if dev.has_label():
+                self.names.set(dev.node_id, dev.friendly_name)
+                continue
+            name = self.names.get(dev.node_id)
+            if name is None or dev.node_id in self.restoring or not dev.node.available:
+                continue
+            log(f"WARNING: {dev.friendly_name} reports no name, should be {name!r}; renaming it")
+            self.restoring.add(dev.node_id)
+            self.matter.submit(self.restore_name(dev, name))
+
+    async def restore_name(self, dev, name):
+        """The same rename a user would request on bridge/request/device/rename."""
+        try:
+            await self.req_device_rename({"from": dev.friendly_name, "to": name})
+        except Exception as e:
+            log(f"WARNING: renaming {dev.friendly_name} back to {name!r} failed: {describe(e)}")
+        finally:
+            self.restoring.discard(dev.node_id)
 
     # --- matter events --------------------------------------------------------
 
@@ -243,11 +277,12 @@ def main():
         sys.exit(f"usage: {sys.argv[0]} <config.json>")
     cfg = config.load(sys.argv[1])
     log(f"config from {sys.argv[1]}: {cfg}")
+    names = NameStore(cfg["names_file"])
     bridge = None
 
     def on_ready(link):
         nonlocal bridge
-        bridge = Bridge(link, cfg["matter_server_url"])
+        bridge = Bridge(link, cfg["matter_server_url"], names)
 
     def on_route(route, payload):
         bridge.dispatch(route, payload)

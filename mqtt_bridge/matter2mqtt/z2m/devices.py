@@ -127,6 +127,11 @@ class Device:
         renamed it after this Device was built."""
         return friendly_name(live_value(self.node, 0, BASIC_INFO, NODE_LABEL), self.node_id)
 
+    def has_label(self):
+        """Whether the device reports a usable name of its own, rather than being published under
+        the matter_<node_id> fallback."""
+        return valid_name(live_value(self.node, 0, BASIC_INFO, NODE_LABEL))
+
     def state(self):
         """Current z2m state, from matter-server's (live-updated) attribute cache. Momentary
         properties (button actions) are events, so they're published separately, not here."""
