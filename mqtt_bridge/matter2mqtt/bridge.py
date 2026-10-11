@@ -9,6 +9,8 @@
                             {"status":"ok","data":{...}} or {"status":"error","error":"..."},
                             echoing "transaction" from the request if it had one.
                             subjects:
+                              health_check  {} -- {"healthy":true} while matter-server is
+                                            connected (z2m's health check)
                               device/dump   {"device":"<device>"} -- every attribute the node
                                             has, named (what matter-discover.py printed)
                               device/rename {"from":"<device>","to":"KitchenLight"} -- writes
@@ -234,6 +236,10 @@ class Bridge:
             log(f"bridge/request/{subject}: {e!r}")
             self.respond(subject, transaction, error=describe(e))
 
+    async def req_health_check(self, payload):
+        """z2m's health_check: ZMW sends it when the network has been quiet for a while."""
+        return {"healthy": self.matter.client is not None}
+
     async def req_device_rename(self, payload):
         """z2m's device/rename. The name goes onto the device, so its topics move with it."""
         client = self.require_client()
@@ -267,6 +273,7 @@ class Bridge:
 
 
 REQUESTS = {
+    "health_check": Bridge.req_health_check,
     "device/dump": Bridge.req_device_dump,
     "device/rename": Bridge.req_device_rename,
 }
