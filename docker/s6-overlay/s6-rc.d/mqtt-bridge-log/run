@@ -23,11 +23,12 @@ ln -sf current "$LOGDIR/mqtt-bridge.log"  # stable .log handle to the live log; 
 to_container() {
     exec mawk -W interactive '
         # The bridge prints "[component] message", so everything is info except
-        # "[component] WARNING: ..." lines, which are warning, and Python tracebacks:
-        # "Traceback ..." through the final exception line are err.
+        # "[component] WARNING: ..." lines, which are warning, "[component] ERROR: ..." lines
+        # and Python tracebacks ("Traceback ..." through the final exception line), which are err.
         {
             if ($0 ~ /^Traceback /) tb = 1
             if (tb) { p = 3; if ($0 !~ /^(Traceback |[ \t])/) tb = 0 }
+            else if ($0 ~ /^\[[a-z]+\] ERROR: /) p = 3
             else if ($0 ~ /^\[[a-z]+\] WARNING: /) p = 4
             else p = 6
             print "<" p ">mqtt-bridge: " $0

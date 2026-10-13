@@ -26,7 +26,17 @@ to_container() {
         # with ANSI colours (coloredlogs does not check for a tty). Drop the colours and the
         # timestamp (journald has its own). Lines without a level are continuations
         # (tracebacks, multi-line messages) and keep the priority of the previous line.
-        BEGIN { p = 6; esc = sprintf("%c", 27) }
+        #
+        # Some SDK errors are only warnings: they are what an unreachable device looks like
+        # (missed check-ins, timed-out sessions and reports, a device still busy with the
+        # previous attempt), logged on every retry. A lossy Thread link or a sleepy device
+        # comes back by itself; the bridge logs an error if one stays offline for too long.
+        BEGIN {
+            p = 6; esc = sprintf("%c", 27)
+            retry = "Subscription Liveness timeout|Time out! failed to receive report data" \
+                    "|CASESession timed out|Failed to establish CASE for re-subscription" \
+                    "|Received error \\(protocol code 4\\)|Msg Retransmission to .* failure"
+        }
         {
             gsub(esc "\\[[0-9;]*m", "")
             if (sub(/^\[matter-server\] /, "")) p = 6
@@ -34,6 +44,7 @@ to_container() {
                 l = toupper(substr($0, RSTART + 1, RLENGTH - 3))
                 p = (l == "CRITICAL") ? 2 : (l ~ /ERROR/) ? 3 : (l == "WARNING") ? 4 : \
                     (l == "INFO" || l == "CHIP_PROGRESS") ? 6 : 7
+                if (l == "CHIP_ERROR" && $0 ~ retry) p = 4
                 sub(/^[0-9][0-9-]* [0-9][0-9:.,]* /, "")
             }
             print "<" p ">matter-server: " $0

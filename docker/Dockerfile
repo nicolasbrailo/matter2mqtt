@@ -11,10 +11,10 @@ RUN apt-get update
 
 # --- ot-br-posix build dependencies -----------------------------------------
 # Curated from ot-br-posix's script/bootstrap install_packages_apt(), trimmed
-# to our cmake flags: NAT64 / WEB / BACKBONE_ROUTER are OFF, so iptables, bind9,
-# dhcpcd, radvd, nodejs/npm, ipset, libnetfilter-queue and the from-source
-# mDNSResponder build are all dropped. mDNS backend = avahi (default); DBUS and
-# REST are ON.
+# to our cmake flags: NAT64 / WEB / BACKBONE_ROUTER / OT_FIREWALL / REST are OFF, so
+# iptables, bind9, dhcpcd, radvd, nodejs/npm, ipset, libnetfilter-queue and the
+# from-source mDNSResponder build are all dropped. mDNS backend = avahi (default);
+# DBUS is ON. Nothing uses REST: ot-ctl/ot-cli talk to otbr-agent over its unix socket.
 RUN apt-get install -y --no-install-recommends \
       ca-certificates \
       git \
@@ -96,8 +96,9 @@ RUN mkdir /matter2mqtt-src/ot-br-posix/build && cd /matter2mqtt-src/ot-br-posix/
     -DOTBR_BORDER_ROUTING=ON \
     -DOTBR_BACKBONE_ROUTER=OFF \
     -DOTBR_NAT64=OFF \
+    -DOT_FIREWALL=OFF \
     -DOTBR_WEB=OFF \
-    -DOTBR_REST=ON \
+    -DOTBR_REST=OFF \
     -DOTBR_DBUS=ON \
     -DOTBR_VENDOR_NAME="NicoMatter2Mqtt" \
     -DOTBR_PRODUCT_NAME="NicoMatter2Mqtt-otbr" \

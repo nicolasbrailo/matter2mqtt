@@ -36,6 +36,7 @@ Run it with `python3 main.py <config.json>` (or `python3 -m matter2mqtt <config.
 module is the wiring: it owns the pieces and decides what gets published where.
   config.py               the json config: base topic, broker socket, matter-server url
   names.py                the names file: node_id -> the name the device should have
+  offline.py              which devices have been offline for too long
   matter/connection.py    the matter-server connection, on its own loop in a background thread
   matter/data_model.py    what Matter calls things: ids, names, raw values
   matter/registry.py      the device table, kept current from that connection
@@ -48,6 +49,7 @@ module is the wiring: it owns the pieces and decides what gets published where.
 Threads: paho runs the connection on the main thread; all Matter work (and the device table)
 lives on the matter loop, so a route is parsed on the paho thread and handed over.
 """
+import asyncio
 import sys
 
 from . import config
@@ -57,6 +59,7 @@ from .matter.data_model import dump_node
 from .matter.provisioning import Provisioner
 from .matter.registry import DeviceRegistry
 from .names import NameStore
+from .offline import OfflineTracker
 from .z2m import control
 from .z2m.devices import Device
 from .z2m.mqtt_link import MqttLink
@@ -66,12 +69,16 @@ def log(msg):
     print(f"[bridge] {msg}", flush=True)
 
 
+OFFLINE_CHECK_SECS = 60  # how often to look for devices offline past offline_alert_minutes
+
+
 class Bridge:
     """Runs on the matter loop, except for the constructor and the routes handed to it."""
 
-    def __init__(self, link, matter_url, names):
+    def __init__(self, link, matter_url, names, offline_alert_minutes):
         self.link = link
         self.names = names
+        self.offline = OfflineTracker(offline_alert_minutes * 60)
         self.restoring = set()  # node_ids with a rename back to their recorded name in flight
         self.matter = Matter(matter_url, on_connect=self.on_matter_connect,
                              on_disconnect=self.on_matter_disconnect)
@@ -86,6 +93,7 @@ class Bridge:
             "request": self.request,
             "device": self.device_request,
         }
+        self.matter.submit(self.watch_offline())
 
     # --- publishing -----------------------------------------------------------
 
@@ -99,6 +107,7 @@ class Bridge:
 
     def publish_devices(self, devices):
         self.link.publish(self.link.devices_topic, [d.info for d in devices], retain=True)
+        self.offline.retain([d.node_id for d in devices])
         for dev in devices:
             self.publish_availability(dev)
             self.publish_state(dev)
@@ -113,6 +122,21 @@ class Bridge:
             online = dev.node.available
         self.link.publish(self.link.availability_topic(dev.friendly_name),
                           {"state": "online" if online else "offline"}, retain=True)
+        offline_secs = self.offline.update(dev.node_id, online)
+        if offline_secs is not None:
+            log(f"{dev.friendly_name} (node {dev.node_id}) is back online after "
+                f"{offline_secs / 60:.0f} minutes offline")
+
+    async def watch_offline(self):
+        """Log an error, once per outage, for each device that stays offline past the threshold.
+        matter-server's own retry errors are only warnings (see matter-server-log), so this is
+        what alerts."""
+        while True:
+            await asyncio.sleep(OFFLINE_CHECK_SECS)
+            for node_id, secs in self.offline.overdue():
+                dev = self.registry.devices.get(node_id)
+                name = dev.friendly_name if dev else f"node {node_id}"
+                log(f"ERROR: {name} (node {node_id}) has been offline for {secs / 60:.0f} minutes")
 
     def forget_name(self, old_name, dev):
         """A device is published under a new name: drop the retained messages under the old one,
@@ -289,7 +313,7 @@ def main():
 
     def on_ready(link):
         nonlocal bridge
-        bridge = Bridge(link, cfg["matter_server_url"], names)
+        bridge = Bridge(link, cfg["matter_server_url"], names, cfg["offline_alert_minutes"])
 
     def on_route(route, payload):
         bridge.dispatch(route, payload)

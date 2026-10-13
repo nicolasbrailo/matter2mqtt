@@ -11,6 +11,8 @@ DEFAULTS = {
     "matter_server_url": "ws://127.0.0.1:5580/ws",
     # Where the bridge records device names, to restore them on devices that forget theirs
     "names_file": "/matter2mqtt-run/mqtt-bridge-names.json",
+    # A device offline for longer than this gets an error logged (once per outage)
+    "offline_alert_minutes": 15,
 }
 
 
@@ -27,4 +29,7 @@ def load(path):
     if not isinstance(topic, str) or not topic.strip("/") or topic != topic.strip("/") \
             or any(c in topic for c in "+#"):
         raise ValueError(f"{path}: bad mqtt_topic {topic!r}")
+    minutes = cfg["offline_alert_minutes"]
+    if isinstance(minutes, bool) or not isinstance(minutes, (int, float)) or minutes <= 0:
+        raise ValueError(f"{path}: bad offline_alert_minutes {minutes!r}")
     return cfg

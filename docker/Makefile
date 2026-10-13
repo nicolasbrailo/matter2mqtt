@@ -154,6 +154,7 @@ bridge-logs:
 test-bridge: sync-bridge
 	docker exec -it -w $(BRIDGE_DIR) $(CONTAINER) python3 tests/test_devices.py
 	docker exec -it -w $(BRIDGE_DIR) $(CONTAINER) python3 tests/test_control.py
+	docker exec -it -w $(BRIDGE_DIR) $(CONTAINER) python3 tests/test_offline.py
 
 # Create a Thread network when the container reports there is none (otbr-agent-net logs
 # "NO THREAD NETWORK" at boot). Refuses if one already exists.

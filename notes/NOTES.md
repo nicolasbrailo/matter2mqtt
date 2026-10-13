@@ -168,7 +168,7 @@ For an isolated Thread island whose only outside link is the MQTT bridge,
 
 1. Open `/dev/ttyACM0`, run the Thread stack against the RCP.
 2. Create `wpan0` (TUN/TAP) so the host's IPv6 stack has a handle on Thread.
-3. Listen on its own REST/D-Bus socket for `ot-ctl`.
+3. Listen on its own unix socket for `ot-ctl` (and D-Bus).
 
 That's it — none of that touches the LAN.
 
@@ -210,8 +210,9 @@ cmake -GNinja \
   -DOTBR_BORDER_ROUTING=ON \
   -DOTBR_BACKBONE_ROUTER=OFF \
   -DOTBR_NAT64=OFF \
+  -DOT_FIREWALL=OFF \
   -DOTBR_WEB=OFF \
-  -DOTBR_REST=ON \
+  -DOTBR_REST=OFF \
   -DOTBR_DBUS=ON \
   -DOTBR_VENDOR_NAME="NicoMT2M" \
   -DOTBR_PRODUCT_NAME="NicoMT2M-otbr" \
