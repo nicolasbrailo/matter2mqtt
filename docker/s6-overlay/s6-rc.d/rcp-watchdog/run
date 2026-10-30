@@ -44,6 +44,16 @@ rcp_answers() {
     ot-cli state >/dev/null 2>&1
 }
 
+# The container's device cgroup can lose /dev/net/tun while it runs: a host `systemctl
+# daemon-reload` makes systemd rebuild the scope's device filter, and with the systemd
+# cgroup driver (docker 20.10 / runc 1.1) that drops tun. A running otbr-agent keeps its
+# open fd, so nothing shows until it restarts (e.g. after an RCP reset); then every start
+# dies in platformConfigureTunDevice() with EPERM. Nothing in here can grant the device
+# back, so the fix is a fresh container.
+tun_blocked() {
+    ! (exec 3</dev/net/tun) 2>/dev/null
+}
+
 # otbr-agent-net only says once, at boot, that no Thread network exists, and that's easy
 # to miss in the rest of the boot output. Keep repeating it until one is created.
 nag_no_network() {
@@ -102,7 +112,15 @@ while :; do
         echo "[rcp-watchdog] otbr-agent not answering ($fails/$FAILS_TO_FLAG)"
         if [ "$fails" -ge "$FAILS_TO_FLAG" ]; then
             fails=0                # don't re-judge every poll mid-recovery
-            if tail -n 80 "$OTBR_LOG" 2>/dev/null | grep -Eq "$WEDGE_RE"; then
+            if tun_blocked; then
+                # Stop the whole container; systemd's Restart=always starts a new one with
+                # its device access restored. Under the dev `make start` (no restart
+                # policy) it just stays stopped.
+                echo "[rcp-watchdog] TUN BLOCKED: can't open /dev/net/tun (device cgroup lost it, host daemon-reload?)"
+                echo "[rcp-watchdog] stopping the container so it gets restarted with device access"
+                /run/s6/basedir/bin/halt
+                sleep infinity     # halt stops us too; don't keep judging meanwhile
+            elif tail -n 80 "$OTBR_LOG" 2>/dev/null | grep -Eq "$WEDGE_RE"; then
                 echo "[rcp-watchdog] RCP WEDGED (Spinel Init failing)"
                 date -Is > "$MARKER"
                 recoveries=$((recoveries + 1))

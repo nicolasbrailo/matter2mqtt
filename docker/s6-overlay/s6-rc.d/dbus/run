@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Longrun: system D-Bus. otbr-agent and avahi both talk to it.
 # --nofork / --nopidfile keep dbus-daemon in the foreground so s6 supervises it.
+# --print-address=3: dbus-daemon writes its address to fd 3 once it's listening, which is the
+# readiness notification s6 waits for (notification-fd). Without it s6 calls dbus up as soon
+# as the process starts, and avahi (which depends on it) can start before the socket exists,
+# fail to connect, exit and be restarted.
 set -euo pipefail
 
 exec 2>&1                         # fold stderr into stdout so dbus-log captures it
 mkdir -p /run/dbus
 dbus-uuidgen --ensure            # dbus-daemon --system needs a machine-id
-exec dbus-daemon --system --nofork --nopidfile
+exec dbus-daemon --system --nofork --nopidfile --print-address=3

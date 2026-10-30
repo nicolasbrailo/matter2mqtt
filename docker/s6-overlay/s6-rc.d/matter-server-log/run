@@ -31,11 +31,19 @@ to_container() {
         # (missed check-ins, timed-out sessions and reports, a device still busy with the
         # previous attempt), logged on every retry. A lossy Thread link or a sleepy device
         # comes back by itself; the bridge logs an error if one stays offline for too long.
+        # "Network is unreachable" is the Thread interface being down while otbr-agent restarts.
+        #
+        # Others are only info: normal shutdown, which the SDK logs at error level, and the
+        # vendor info download from the DCL, which fails by design (no internet).
         BEGIN {
             p = 6; esc = sprintf("%c", 27)
             retry = "Subscription Liveness timeout|Time out! failed to receive report data" \
                     "|CASESession timed out|Failed to establish CASE for re-subscription" \
-                    "|Received error \\(protocol code 4\\)|Msg Retransmission to .* failure"
+                    "|Received error \\(protocol code 4\\)|Msg Retransmission to .* failure" \
+                    "|Network is unreachable"
+            expected = "Shutting down the stack|Failed to advertise records" \
+                       "|No unsolicited message handler at .*BdxTransferServer" \
+                       "|Unable to fetch vendor info from DCL"
         }
         {
             gsub(esc "\\[[0-9;]*m", "")
@@ -45,6 +53,7 @@ to_container() {
                 p = (l == "CRITICAL") ? 2 : (l ~ /ERROR/) ? 3 : (l == "WARNING") ? 4 : \
                     (l == "INFO" || l == "CHIP_PROGRESS") ? 6 : 7
                 if (l == "CHIP_ERROR" && $0 ~ retry) p = 4
+                if (p == 3 && $0 ~ expected) p = 6
                 sub(/^[0-9][0-9-]* [0-9][0-9:.,]* /, "")
             }
             print "<" p ">matter-server: " $0

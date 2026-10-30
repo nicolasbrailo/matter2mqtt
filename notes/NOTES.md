@@ -1262,6 +1262,15 @@ be host-side (unbind/rebind by sysfs path, escalating to `uhubctl`), gated befor
 (e.g. `spinel-cli.py version`), because every cheap check (device node exists,
 port opens, baud) passes while wedged — only the round-trip times out.
 
+Lost `/dev/net/tun` (2026-10-18): a host `systemctl daemon-reload` made systemd
+rebuild the container scope's device filter (systemd cgroup driver, docker 20.10 /
+runc 1.1), and tun stopped being openable inside the container (`/dev/ttyACM0`
+still opened). Hidden until the next RCP reset restarted otbr-agent, which then
+crash-looped on `platformConfigureTunDevice() ... Operation not permitted`. Only a
+new container gets device access back, so when otbr-agent is unhealthy and tun
+can't be opened, the watchdog halts the container and systemd's `Restart=always`
+brings up a fresh one.
+
 ### Running the container as non-root — DEFERRED until after Path B
 
 Goal: the container's uid should be **unprivileged on the host** (a container
