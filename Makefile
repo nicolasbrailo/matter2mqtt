@@ -8,8 +8,8 @@ rebuild:
 	$(MAKE) -C docker rebuild
 
 # Install the two proxies and the container as systemd units (templates in systemd/).
-# Units are rendered with the values below and written to /etc/systemd/system, then enabled
-# but NOT started -- the container unit `docker rm -f`s anything named matter2mqtt, so
+# Units are rendered with the values below into SYSTEMD_RUNDIR, linked into systemd with
+# `systemctl link`, then enabled but NOT started -- the container unit `docker rm -f`s anything named matter2mqtt, so
 # starting it on a dev box would kill a `make -C docker start` container. Start with
 #   sudo systemctl start matter2mqtt.service
 # (pulls in both proxies). SYSTEMD_RUNDIR is the host state dir (Thread network, logs, MQTT
@@ -33,8 +33,10 @@ install_systemd:
 		    -e 's|@BROKER@|$(BROKER)|g' \
 		    -e 's|@BROKER_PORT@|$(BROKER_PORT)|g' \
 		    -e 's|@IMAGE@|$(IMAGE)|g' \
-		    "$(CURDIR)/systemd/$$u" | sudo tee "/etc/systemd/system/$$u" >/dev/null || exit 1; \
+		    "$(CURDIR)/systemd/$$u" > "$(SYSTEMD_RUNDIR)/$$u" || exit 1; \
 	done
+	# Re-linking a unit that's already linked to the same file is a no-op
+	sudo systemctl link $(addprefix '$(SYSTEMD_RUNDIR)'/,$(SYSTEMD_UNITS))
 	sudo systemctl daemon-reload
 	# mqtt-proxy.service has no [Install]: its socket activates it.
 	sudo systemctl enable $(filter-out matter2mqtt-mqtt-proxy.service,$(SYSTEMD_UNITS))

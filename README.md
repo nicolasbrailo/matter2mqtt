@@ -21,7 +21,7 @@ Contents
     - `idf.py monitor` to verify the firmware comes up and logs something like "OpenThread enter mainloop"
 
 2. Build a docker image with `make rebuild`
-3. `make install_systemd` will install 3 systemd services: a bridge from the host's bluetooth to the container, one for mqtt, and one for the matter2mqtt container itself. They are not started after installing.
+3. `make install_systemd` will install 3 systemd services: a bridge from the host's bluetooth to the container, one for mqtt, and one for the matter2mqtt container itself. The unit files are written to `~/run/matter2mqtt` and linked into systemd with `systemctl link`. They are not started after installing.
 4. `systemctl start matter2mqtt-bluez-proxy.service matter2mqtt-mqtt-proxy.service`
 5. `journalctl -fu matter2mqtt.service` to tail the startup logs
 6. `systemctl start matter2mqtt.service` to run the container; this will complain, loudly, that no Thread network exists
